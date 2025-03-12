@@ -52,7 +52,7 @@ jobs:
         uses: ./.github/actions/checkout-submodules-and-bootstrap
         with:
           platform: telink
-          token: ${{ secrets.MY_MATTER_TOKEN }}
+          token: ${{ secrets.TELINK_SDK_PAT }}
 
       - name: Set up environment for size reports
         uses: ./.github/actions/setup-size-reports
@@ -62,7 +62,7 @@ jobs:
 
       - name: Update Zephyr to specific revision (for developers purpose)
         env:
-          MATTER_TOKEN: ${{ secrets.MY_MATTER_TOKEN }}
+          MATTER_TOKEN: ${{ secrets.TELINK_SDK_PAT }}
         run: |
           echo "Verifying GitHub access permissions using provided GitHub token..."
           curl -s -H "Authorization: token $MATTER_TOKEN" https://api.github.com/user
