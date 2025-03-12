@@ -1,0 +1,1298 @@
+/*
+ *
+ *    Copyright (c) 2022-2024 Project CHIP Authors
+ *    All rights reserved.
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License");
+ *    you may not use this file except in compliance with the License.
+ *    You may obtain a copy of the License at
+ *
+ *        http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS,
+ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *    See the License for the specific language governing permissions and
+ *    limitations under the License.
+ */
+
+#include "AppTaskCommon.h"
+#include "AppTask.h"
+#include "AppConfig.h"
+#include "BLEManagerImpl.h"
+#include "ButtonManager.h"
+#include "LEDManager.h"
+#include "PWMManager.h"
+
+#if CHIP_DEVICE_CONFIG_ENABLE_THREAD
+#include "ThreadUtil.h"
+#elif CHIP_DEVICE_CONFIG_ENABLE_WIFI
+#include <platform/Zephyr/InetUtils.h>
+#include <platform/telink/wifi/TelinkWiFiDriver.h>
+#endif
+
+#include <DeviceInfoProviderImpl.h>
+#include <app/clusters/identify-server/identify-server.h>
+#include <app/clusters/ota-requestor/OTATestEventTriggerHandler.h>
+#include <app/server/OnboardingCodesUtil.h>
+#include <app/server/Server.h>
+#include <app/util/attribute-storage.h>
+#include <app/util/endpoint-config-api.h>
+
+#if CONFIG_BOOTLOADER_MCUBOOT
+#include <OTAUtil.h>
+#endif
+
+#include <analog.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/storage/flash_map.h>
+#include <zephyr/sys/reboot.h>
+
+#include "lds_light_effect.h"
+
+#if CONFIG_CHIP_OTA_REQUESTOR
+#include <app/clusters/ota-requestor/OTARequestorInterface.h>
+#endif
+
+#include <app-common/zap-generated/attributes/Accessors.h>
+
+using namespace chip::app;
+
+LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
+
+namespace {
+constexpr int kFactoryResetCalcTimeout = 3000;
+constexpr int kFactoryResetTriggerCntr = 3;
+constexpr int kAppEventQueueSize       = 10;
+constexpr int kDnssTimeout = 90000; // for init will cost for about 5s
+
+constexpr uint32_t kIdentifyBlinkRateMs         = 200;
+constexpr uint32_t kIdentifyOkayOnRateMs        = 50;
+constexpr uint32_t kIdentifyOkayOffRateMs       = 950;
+constexpr uint32_t kIdentifyFinishOnRateMs      = 950;
+constexpr uint32_t kIdentifyFinishOffRateMs     = 50;
+constexpr uint32_t kIdentifyChannelChangeRateMs = 1000;
+constexpr uint32_t kIdentifyBreatheRateMs       = 1000;
+
+#if APP_SET_NETWORK_COMM_ENDPOINT_SEC
+constexpr EndpointId kNetworkCommissioningEndpointSecondary = 0xFFFE;
+#endif
+
+K_MSGQ_DEFINE(sAppEventQueue, sizeof(AppEvent), kAppEventQueueSize, alignof(AppEvent));
+
+k_timer sFactoryResetTimer;
+uint8_t sFactoryResetCntr = 0;
+
+bool sIsCommissioningFailed = false;
+bool sIsNetworkProvisioned  = false;
+bool sIsNetworkEnabled      = false;
+bool sIsNetworkAttached     = false;
+bool sHaveBLEConnections    = false;
+
+
+
+const struct device * flash_para_dev = USER_PARTITION_DEVICE;
+const struct device * zb_para_dev = ZB_NVS_PARTITION_DEVICE;
+
+k_timer sDnssTimer;
+
+uint8_t sBoot_zb = 0;
+
+#if APP_SET_DEVICE_INFO_PROVIDER
+chip::DeviceLayer::DeviceInfoProviderImpl gExampleDeviceInfoProvider;
+#endif
+
+#ifndef IDENTIFY_CLUSTER_DISABLED
+
+void OnIdentifyTriggerEffect(Identify * identify)
+{
+    AppTaskCommon::IdentifyEffectHandler(identify->mCurrentEffectIdentifier);
+}
+
+Identify sIdentify = {
+    kExampleEndpointId,           AppTask::IdentifyStartHandler,
+    AppTask::IdentifyStopHandler, Clusters::Identify::IdentifyTypeEnum::kLightOutput,
+    OnIdentifyTriggerEffect,
+};
+
+#endif
+
+// NOTE! This key is for test/certification only and should not be available in production devices!
+uint8_t sTestEventTriggerEnableKey[TestEventTriggerDelegate::kEnableKeyLength] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+                                                                                   0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
+
+class AppCallbacks : public AppDelegate
+{
+    bool isComissioningStarted;
+
+public:
+    void OnCommissioningSessionEstablishmentStarted() override { sIsCommissioningFailed = false; }
+    void OnCommissioningSessionStarted() override { isComissioningStarted = true; }
+    void OnCommissioningSessionStopped() override { isComissioningStarted = false; }
+    void OnCommissioningSessionEstablishmentError(CHIP_ERROR err) override { sIsCommissioningFailed = true; }
+#if CHIP_DEVICE_CONFIG_ENABLE_CHIPOBLE
+    void OnCommissioningWindowClosed() override
+    {
+        if (!isComissioningStarted)
+            chip::DeviceLayer::Internal::BLEMgr().Shutdown();
+    }
+#endif
+};
+
+AppCallbacks sCallbacks;
+} // namespace
+
+#if APP_LIGHT_USER_MODE_EN
+#if CONFIG_STARTUP_OPTIMIZATE
+cluster_startup_para g_light_cluster_para;
+const struct device *cluster_para_dev = USER_CLUSTER_PARTITION_DEVICE;
+
+uint32_t cluster_para_addr = USER_CLUSTER_PARTITION_OFFSET;
+#define CLUSTER_PARA_LEN (sizeof(cluster_startup_para))
+#define USER_CLUSTER_PARTITION_END (    \
+    USER_CLUSTER_PARTITION_OFFSET + USER_CLUSTER_PARTITION_SIZE)
+
+void clear_cluster_para(void)
+{
+    flash_erase(cluster_para_dev, USER_CLUSTER_PARTITION_OFFSET, USER_CLUSTER_PARTITION_SIZE);
+    cluster_para_addr = USER_CLUSTER_PARTITION_OFFSET;
+}
+
+void init_cluster_partition(void)
+{
+    uint32_t i, cur_addr;
+    cluster_startup_para t_cmp;
+    cluster_startup_para t_cmp_back;
+    memset((void *)(&t_cmp_back), 0xff, CLUSTER_PARA_LEN);
+
+    for (i = 0;; i++)
+    {
+        cur_addr = USER_CLUSTER_PARTITION_OFFSET + i * CLUSTER_PARA_LEN;
+
+        if (cur_addr >= USER_CLUSTER_PARTITION_END)
+        {
+            clear_cluster_para();
+            break;
+        }
+
+        flash_read(cluster_para_dev, cur_addr, &t_cmp, CLUSTER_PARA_LEN);
+        if (memcmp(&t_cmp, &t_cmp_back, CLUSTER_PARA_LEN) == 0) // read t_cmp is 0xff
+        {
+            cluster_para_addr = cur_addr;
+            return;
+        }
+    }
+}
+
+int store_cluster_para(cluster_startup_para *data)
+{
+    if (data == NULL)
+    {
+        return -1;
+    }
+
+    if (cluster_para_addr >= (USER_CLUSTER_PARTITION_END - CLUSTER_PARA_LEN))
+    {
+        clear_cluster_para();
+    }
+
+    flash_write(cluster_para_dev, cluster_para_addr, data, CLUSTER_PARA_LEN);
+    cluster_para_addr += CLUSTER_PARA_LEN;
+
+    return 0;
+}
+
+int read_cluster_para(cluster_startup_para *data)
+{
+    if (data == NULL)
+    {
+        return -1;
+    }
+
+    if (cluster_para_addr >= USER_CLUSTER_PARTITION_END)
+    {
+        clear_cluster_para();
+        return -1;
+    }
+    if ((cluster_para_addr - CLUSTER_PARA_LEN) < USER_CLUSTER_PARTITION_OFFSET)
+    {
+        return -1;
+    }
+
+    cluster_startup_para t_cmp;
+    cluster_startup_para t_cmp_back;
+    memset((void *)(&t_cmp_back), 0xff, CLUSTER_PARA_LEN);
+
+    flash_read(cluster_para_dev, (cluster_para_addr - CLUSTER_PARA_LEN), &t_cmp, CLUSTER_PARA_LEN);
+    if (memcmp(&t_cmp, &t_cmp_back, CLUSTER_PARA_LEN) == 0) // read t_cmp is 0xff, error
+    {
+        clear_cluster_para();
+        return -1;
+    }
+    memcpy(data, &t_cmp, CLUSTER_PARA_LEN);
+    return 0;
+}
+#endif
+#endif
+
+#define ANALOG_REG_ADR      0x3b
+#define ANALOG_OTA_FLAG_VAL 0x55
+#define PART_NUMBER_STRING_LENGTH (16)
+
+void AppTaskCommon::OtaSetAnaFlag(void)
+{
+    analog_write(ANALOG_REG_ADR, ANALOG_OTA_FLAG_VAL);
+}
+
+bool AppTaskCommon::OtaGetAnaFlag(void)
+{
+    if(analog_read(ANALOG_REG_ADR) == ANALOG_OTA_FLAG_VAL)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+bool AppTaskCommon::OtaGetAnaFlagPublic(void)
+{
+    return AppTaskCommon::OtaGetAnaFlag();
+}
+
+class AppFabricTableDelegate : public FabricTable::Delegate
+{
+    void OnFabricRemoved(const FabricTable & fabricTable, FabricIndex fabricIndex)
+    {
+        // ldsLightEffectLeaveNetworkStart();
+        // k_sleep(K_MSEC(1000)); // sleep for waiting light effect
+        if (chip::Server::GetInstance().GetFabricTable().FabricCount() == 0)
+        {
+            ChipLogProgress(DeviceLayer, "Performing erasing of settings partition");
+
+            // Erase the user parameters partition to reset mode settings
+            flash_erase(flash_para_dev, USER_PARTITION_OFFSET, USER_PARTITION_SIZE);
+            // Need to erase zb nvs part 
+            flash_erase(zb_para_dev, ZB_NVS_START_ADR, ZB_NVS_SEC_SIZE);
+#if APP_LIGHT_USER_MODE_EN
+#if CONFIG_STARTUP_OPTIMIZATE
+            // Need to erase cluster para part 
+            flash_erase(cluster_para_dev, USER_CLUSTER_PARTITION_OFFSET, USER_CLUSTER_PARTITION_SIZE);
+#endif
+#endif
+
+            printk("Erasing user parameters and resetting to Zigbee mode");
+
+            // Do FactoryReset in case of failed commissioning to allow new pairing via BLE
+            if (sIsCommissioningFailed)
+            {
+                chip::Server::GetInstance().ScheduleFactoryReset();
+            }
+            // TC-OPCREDS-3.6 (device doesn't need to reboot automatically after the last fabric is removed) can't use FactoryReset
+            else
+            {
+                void * storage = nullptr;
+                int status     = settings_storage_get(&storage);
+
+                ChipLogError(DeviceLayer, "OnFabricRemoved settings_storage_get: %d", status);
+
+                if (!status)
+                {
+                    status = nvs_clear(static_cast<nvs_fs *>(storage));
+                }
+
+                if (!status)
+                {
+                    status = nvs_mount(static_cast<nvs_fs *>(storage));
+                }
+
+                if (status)
+                {
+                    ChipLogError(DeviceLayer, "Storage clearance failed: %d", status);
+                }
+
+                chip::Server::GetInstance().ScheduleFactoryReset();
+            }
+        }
+    }
+};
+
+class PlatformMgrDelegate : public DeviceLayer::PlatformManagerDelegate
+{
+    // Disable openthread before reset to prevent writing to NVS
+#if CHIP_DEVICE_CONFIG_ENABLE_THREAD
+    void OnShutDown() override
+    {
+        if (ThreadStackManagerImpl().IsThreadEnabled())
+        {
+            ThreadStackManagerImpl().Finalize();
+        }
+    }
+#endif // CHIP_DEVICE_CONFIG_ENABLE_THREAD
+};
+
+#if CONFIG_CHIP_LIB_SHELL
+#include <zephyr/shell/shell.h>
+#include <zephyr/sys/reboot.h>
+
+static int cmd_telink_reboot(const struct shell * shell, size_t argc, char ** argv)
+{
+    ARG_UNUSED(argc);
+    ARG_UNUSED(argv);
+
+    shell_print(shell, "Performing board reboot...");
+    sys_reboot(0);
+
+    return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_telink, SHELL_CMD(reboot, NULL, "Reboot board command", cmd_telink_reboot),
+                               SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(telink, &sub_telink, "Telink commands", NULL);
+#endif // CONFIG_CHIP_LIB_SHELL
+
+#ifdef CONFIG_CHIP_ENABLE_POWER_ON_FACTORY_RESET
+void AppTaskCommon::PowerOnFactoryReset(void)
+{
+    LOG_INF("schedule factory reset");
+    chip::Server::GetInstance().ScheduleFactoryReset();
+}
+#endif /* CONFIG_CHIP_ENABLE_POWER_ON_FACTORY_RESET */
+
+
+light_para_t  light_para;
+user_para_t user_para;
+unsigned char para_lightness = 0;
+CHIP_ERROR AppTaskCommon::StartApp(void)
+{
+     /* Proc ota boot flag , and erase flag */
+    flash_read(flash_para_dev, USER_PARTITION_OFFSET, &user_para, sizeof(user_para));
+    /* Boot from Zigbee , need to clean the user parameters sector first and set a flag */
+    if (user_para.val == USER_ZB_SW_VAL){
+        // if switch from zb , need to get all the cluster info from zb
+        flash_read(flash_para_dev, USER_PARTITION_OFFSET+sizeof(user_para), &light_para, sizeof(light_para));
+        //flash_erase(flash_para_dev, USER_PARTITION_OFFSET, USER_PARTITION_SIZE);
+        sBoot_zb = 1;
+        /* Ensure lightness is at least 2 to avoid display error on HomePod Mini */
+        if(light_para.level < 2){
+            light_para.level = 2;
+        }
+        /* Pass the value to the init part to avoid gaps in pwm_pool init */
+        if(light_para.onoff){
+            para_lightness = light_para.level;
+        }
+        k_timer_init(&sDnssTimer, &AppTask::DnssTimerTimeoutCallback, nullptr);
+        k_timer_start(&sDnssTimer, K_MSEC(kDnssTimeout), K_NO_WAIT);
+        printk("Matter: start timer to protect Dnss initialized \r\n");
+    }
+
+    CHIP_ERROR err = GetAppTask().Init();
+
+    if (err != CHIP_NO_ERROR)
+    {
+        LOG_ERR("AppTask Init fail");
+        return err;
+    }
+
+    AppEvent event = {};
+
+#if !CHIP_DEVICE_CONFIG_ENABLE_CHIPOBLE
+#if CHIP_DEVICE_CONFIG_ENABLE_THREAD
+    StartThreadButtonEventHandler();
+#elif CHIP_DEVICE_CONFIG_ENABLE_WIFI
+    StartWiFiButtonEventHandler();
+#endif
+#endif /* CHIP_DEVICE_CONFIG_ENABLE_CHIPOBLE */
+
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+    if (!sIsNetworkProvisioned)
+    {
+        LOG_INF("Confirm image.");
+        OtaConfirmNewImage();
+    }
+#endif /* CONFIG_BOOTLOADER_MCUBOOT */
+
+    while (true)
+    {
+        GetEvent(&event);
+        DispatchEvent(&event);
+    }
+}
+
+#if INDEPENDENT_FACTORY_RESET_BUTTON
+void AppTaskCommon::IndependentFactoryReset(void)
+{
+    // Get Button Instance
+    ButtonManager & buttonManager = ButtonManager::getInstance();
+    // Button binding to factory_reset and add callback
+    buttonManager.addCallback(FactoryResetButtonEventHandler, 0, true);
+
+#if CONFIG_CHIP_BUTTON_MANAGER_IRQ_MODE  // Independent Button Mode
+    buttonManager.linkBackend(ButtonPool::getInstance());
+#else
+    buttonManager.linkBackend(ButtonMatrix::getInstance());
+#endif // CONFIG_CHIP_BUTTON_MANAGER_IRQ_MODE
+}
+#endif
+
+CHIP_ERROR AppTaskCommon::InitCommonParts(void)
+{
+    CHIP_ERROR err;
+    LOG_INF("SW Version: %u, %s", CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION, CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION_STRING);
+
+/* if use user mode ,should disable the hardware init to avoid conflict*/
+#if APP_LIGHT_USER_MODE_EN
+
+#if INDEPENDENT_FACTORY_RESET_BUTTON
+    IndependentFactoryReset();  // Open the factory_reset button separately.
+#endif
+
+#else
+    InitLeds();
+    UpdateStatusLED();
+
+    //InitPwms();
+
+    InitButtons();
+#endif    
+
+    // Initialize function button timer
+    k_timer_init(&sFactoryResetTimer, &AppTask::FactoryResetTimerTimeoutCallback, nullptr);
+    k_timer_user_data_set(&sFactoryResetTimer, this);
+
+    // Initialize CHIP server
+#if CONFIG_CHIP_FACTORY_DATA
+    ReturnErrorOnFailure(mFactoryDataProvider.Init());
+    SetDeviceInstanceInfoProvider(&mFactoryDataProvider);
+    SetDeviceAttestationCredentialsProvider(&mFactoryDataProvider);
+    SetCommissionableDataProvider(&mFactoryDataProvider);
+    // Read EnableKey from the factory data.
+    MutableByteSpan enableKey(sTestEventTriggerEnableKey);
+    err = mFactoryDataProvider.GetEnableKey(enableKey);
+    if (err != CHIP_NO_ERROR)
+    {
+        LOG_ERR("mFactoryDataProvider.GetEnableKey() failed. Could not delegate a test event trigger");
+        memset(sTestEventTriggerEnableKey, 0, sizeof(sTestEventTriggerEnableKey));
+    }
+#else
+    SetDeviceAttestationCredentialsProvider(Examples::GetExampleDACProvider());
+#endif
+
+    // Init ZCL Data Model and start server
+    static CommonCaseDeviceServerInitParams initParams;
+    static SimpleTestEventTriggerDelegate sTestEventTriggerDelegate{};
+    VerifyOrDie(sTestEventTriggerDelegate.Init(ByteSpan(sTestEventTriggerEnableKey)) == CHIP_NO_ERROR);
+#if CONFIG_CHIP_OTA_REQUESTOR
+    static OTATestEventTriggerHandler sOtaTestEventTriggerHandler{};
+    VerifyOrDie(sTestEventTriggerDelegate.AddHandler(&sOtaTestEventTriggerHandler) == CHIP_NO_ERROR);
+#endif
+    (void) initParams.InitializeStaticResourcesBeforeServerInit();
+    initParams.appDelegate              = &sCallbacks;
+    initParams.testEventTriggerDelegate = &sTestEventTriggerDelegate;
+    ReturnErrorOnFailure(chip::Server::GetInstance().Init(initParams));
+
+#if APP_SET_DEVICE_INFO_PROVIDER
+    gExampleDeviceInfoProvider.SetStorageDelegate(&Server::GetInstance().GetPersistentStorage());
+    chip::DeviceLayer::SetDeviceInfoProvider(&gExampleDeviceInfoProvider);
+#endif
+
+    ConfigurationMgr().LogDeviceConfig();
+    PrintOnboardingCodes(chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kBLE));
+
+#if APP_SET_NETWORK_COMM_ENDPOINT_SEC
+    // We only have network commissioning on endpoint 0.
+    // Set up a valid Network Commissioning cluster on endpoint 0 is done in
+    // src/platform/OpenThread/GenericThreadStackManagerImpl_OpenThread.hpp
+    emberAfEndpointEnableDisable(kNetworkCommissioningEndpointSecondary, false);
+#endif
+
+    // We need to disable OpenThread to prevent writing to the NVS storage when factory reset occurs
+    // The OpenThread thread is running during factory reset. The nvs_clear function is called during
+    // factory reset, which makes the NVS storage innaccessible, but the OpenThread knows nothing
+    // about this and tries to store the parameters to NVS. Because of this the OpenThread need to be
+    // shut down before NVS. This delegate fixes the issue "Failed to store setting , ret -13",
+    // which means that the NVS is already disabled.
+    // For this the OnShutdown function is used
+    PlatformMgr().SetDelegate(new PlatformMgrDelegate);
+
+    // Add CHIP event handler and start CHIP thread.
+    // Note that all the initialization code should happen prior to this point to avoid data races
+    // between the main and the CHIP threads.
+    PlatformMgr().AddEventHandler(ChipEventHandler, 0);
+
+    err = chip::Server::GetInstance().GetFabricTable().AddFabricDelegate(new AppFabricTableDelegate);
+    if (err != CHIP_NO_ERROR)
+    {
+        LOG_ERR("AppFabricTableDelegate fail");
+        return err;
+    }
+
+    return CHIP_NO_ERROR;
+}
+
+void AppTaskCommon::IdentifyStartHandler(Identify *)
+{
+    AppEvent event;
+
+    event.Type    = AppEvent::kEventType_IdentifyStart;
+    event.Handler = [](AppEvent * event) {
+        ChipLogProgress(Zcl, "OnIdentifyStart");
+        // PwmManager::getInstance().setPwmBlink(PwmManager::EAppPwm_Indication, kIdentifyBlinkRateMs, kIdentifyBlinkRateMs);
+        ldsLightEffectIdentifyStart();
+    };
+    GetAppTask().PostEvent(&event);
+}
+
+void AppTaskCommon::IdentifyStopHandler(Identify *)
+{
+    AppEvent event;
+
+    event.Type    = AppEvent::kEventType_IdentifyStop;
+    event.Handler = [](AppEvent * event) {
+        ChipLogProgress(Zcl, "OnIdentifyStop");
+        // PwmManager::getInstance().setPwm(PwmManager::EAppPwm_Indication, false);
+    };
+    GetAppTask().PostEvent(&event);
+}
+
+#ifdef CONFIG_CHIP_PW_RPC
+void AppTaskCommon::ButtonEventHandler(ButtonId_t btnId, bool btnPressed)
+{
+    if (!btnPressed)
+    {
+        return;
+    }
+
+    switch (btnId)
+    {
+    case kButtonId_ExampleAction:
+        ExampleActionButtonEventHandler();
+        break;
+    case kButtonId_FactoryReset:
+        FactoryResetButtonEventHandler();
+        break;
+#if CHIP_DEVICE_CONFIG_ENABLE_THREAD
+    case kButtonId_StartThread:
+        StartThreadButtonEventHandler();
+        break;
+#elif CHIP_DEVICE_CONFIG_ENABLE_WIFI
+    case kButtonId_StartWiFi:
+        StartWiFiButtonEventHandler();
+        break;
+#endif
+    case kButtonId_StartBleAdv:
+        StartBleAdvButtonEventHandler();
+        break;
+    }
+}
+#endif
+
+void AppTaskCommon::InitLeds()
+{
+    LedManager & ledManager = LedManager::getInstance();
+
+    LinkLeds(ledManager);
+
+    ledManager.linkBackend(LedPool::getInstance());
+}
+
+void AppTaskCommon::LinkLeds(LedManager & ledManager)
+{
+#if CONFIG_CHIP_ENABLE_APPLICATION_STATUS_LED
+    ledManager.linkLed(LedManager::EAppLed_Status, 0);
+#endif // CONFIG_CHIP_ENABLE_APPLICATION_STATUS_LED
+}
+
+void AppTaskCommon::InitPwms()
+{
+    PwmManager & pwmManager = PwmManager::getInstance();
+
+    LinkPwms(pwmManager);
+
+#if CONFIG_WS2812_STRIP
+    pwmManager.linkBackend(Ws2812Strip::getInstance());
+#else
+    pwmManager.linkBackend(PwmPool::getInstance());
+#endif // CONFIG_WS2812_STRIP
+}
+
+void AppTaskCommon::LinkPwms(PwmManager & pwmManager)
+{
+#if CONFIG_WS2812_STRIP ||                                                                                                         \
+    CONFIG_BOARD_TLSR9118BDK40D // TLSR9118BDK40D EVK buttons located on 4th PWM channel (see tlsr9118bdk40d.overlay)
+    pwmManager.linkPwm(PwmManager::EAppPwm_Red, 0);
+    pwmManager.linkPwm(PwmManager::EAppPwm_Green, 1);
+    pwmManager.linkPwm(PwmManager::EAppPwm_Blue, 2);
+#else
+    pwmManager.linkPwm(PwmManager::EAppPwm_Indication, 0);
+    pwmManager.linkPwm(PwmManager::EAppPwm_Red, 1);
+    pwmManager.linkPwm(PwmManager::EAppPwm_Green, 2);
+    pwmManager.linkPwm(PwmManager::EAppPwm_Blue, 3);
+#endif // CONFIG_WS2812_STRIP
+}
+
+void AppTaskCommon::InitButtons(void)
+{
+    ButtonManager & buttonManager = ButtonManager::getInstance();
+
+    LinkButtons(buttonManager);
+
+#if CONFIG_CHIP_BUTTON_MANAGER_IRQ_MODE
+    buttonManager.linkBackend(ButtonPool::getInstance());
+#else
+    buttonManager.linkBackend(ButtonMatrix::getInstance());
+#endif // CONFIG_CHIP_BUTTON_MANAGER_IRQ_MODE
+}
+
+void AppTaskCommon::LinkButtons(ButtonManager & buttonManager)
+{
+    buttonManager.addCallback(FactoryResetButtonEventHandler, 0, true);
+    buttonManager.addCallback(ExampleActionButtonEventHandler, 1, true);
+    buttonManager.addCallback(StartBleAdvButtonEventHandler, 2, true);
+#if CHIP_DEVICE_CONFIG_ENABLE_THREAD
+    buttonManager.addCallback(StartThreadButtonEventHandler, 3, true);
+#elif CHIP_DEVICE_CONFIG_ENABLE_WIFI
+    buttonManager.addCallback(StartWiFiButtonEventHandler, 3, true);
+#endif
+}
+
+void AppTaskCommon::UpdateStatusLED()
+{
+    if (sIsNetworkProvisioned && sIsNetworkEnabled)
+    {
+        if (sIsNetworkAttached)
+        {
+            LedManager::getInstance().setLed(LedManager::EAppLed_Status, 950, 50);
+        }
+        else
+        {
+            LedManager::getInstance().setLed(LedManager::EAppLed_Status, 100, 100);
+        }
+    }
+    else
+    {
+        LedManager::getInstance().setLed(LedManager::EAppLed_Status, 50, 950);
+    }
+}
+
+void AppTaskCommon::IdentifyEffectHandler(Clusters::Identify::EffectIdentifierEnum aEffect)
+{
+    switch (aEffect)
+    {
+    case Clusters::Identify::EffectIdentifierEnum::kBlink:
+        ChipLogProgress(Zcl, "Clusters::Identify::EffectIdentifierEnum::kBlink");
+        ldsLightEffectIdentifyOneBlink();
+        break;
+    case Clusters::Identify::EffectIdentifierEnum::kBreathe:
+        ChipLogProgress(Zcl, "Clusters::Identify::EffectIdentifierEnum::kBreathe");
+        ldsLightEffectIdentifyBreathe();
+        break;
+    case Clusters::Identify::EffectIdentifierEnum::kOkay:
+        ChipLogProgress(Zcl, "Clusters::Identify::EffectIdentifierEnum::kOkay");
+        ldsLightEffectIdentifyOkay();
+        break;
+    case Clusters::Identify::EffectIdentifierEnum::kChannelChange:
+        ChipLogProgress(Zcl, "Clusters::Identify::EffectIdentifierEnum::kChannelChange");
+        ldsLightEffectIdentifyChannelChange();
+        break;
+    case Clusters::Identify::EffectIdentifierEnum::kFinishEffect:
+        ChipLogProgress(Zcl, "Clusters::Identify::EffectIdentifierEnum::kFinishEffect");
+
+        break;
+    case Clusters::Identify::EffectIdentifierEnum::kStopEffect:
+        ChipLogProgress(Zcl, "Clusters::Identify::EffectIdentifierEnum::kStopEffect");
+        ldsLightMultiEffectStop();
+        break;
+    default:
+        ChipLogProgress(Zcl, "No identifier effect");
+        return;
+    }
+}
+
+void AppTaskCommon::StartBleAdvButtonEventHandler(void)
+{
+    AppEvent event;
+
+    event.Type               = AppEvent::kEventType_Button;
+    event.ButtonEvent.Action = kButtonPushEvent;
+    event.Handler            = StartBleAdvHandler;
+    GetAppTask().PostEvent(&event);
+}
+
+void AppTaskCommon::StartBleAdvHandler(AppEvent * aEvent)
+{
+    LOG_INF("StartBleAdvHandler");
+
+    // Disable manual Matter service BLE advertising after device provisioning.
+    if (sIsNetworkProvisioned)
+    {
+        LOG_INF("Device already commissioned");
+        return;
+    }
+
+    if (ConnectivityMgr().IsBLEAdvertisingEnabled())
+    {
+        LOG_INF("BLE adv already enabled");
+        return;
+    }
+
+    if (chip::Server::GetInstance().GetCommissioningWindowManager().OpenBasicCommissioningWindow() != CHIP_NO_ERROR)
+    {
+        LOG_ERR("OpenBasicCommissioningWindow fail");
+    }
+}
+
+void AppTaskCommon::FactoryResetButtonEventHandler(void)
+{
+    AppEvent event;
+
+    event.Type               = AppEvent::kEventType_Button;
+    event.ButtonEvent.Action = kButtonPushEvent;
+    event.Handler            = FactoryResetHandler;
+    GetAppTask().PostEvent(&event);
+}
+
+void AppTaskCommon::FactoryResetHandler(AppEvent * aEvent)
+{
+    if (sFactoryResetCntr == 0)
+    {
+        k_timer_start(&sFactoryResetTimer, K_MSEC(kFactoryResetCalcTimeout), K_NO_WAIT);
+    }
+
+    sFactoryResetCntr++;
+    LOG_INF("Factory Reset Trigger Counter: %d/%d", sFactoryResetCntr, kFactoryResetTriggerCntr);
+
+    if (sFactoryResetCntr == kFactoryResetTriggerCntr)
+    {
+        k_timer_stop(&sFactoryResetTimer);
+        sFactoryResetCntr = 0;
+
+        // Erase user parameters partition and reset to Zigbee mode upon factory reset
+        flash_erase(flash_para_dev, USER_PARTITION_OFFSET, USER_PARTITION_SIZE);
+        // Need to erase zb nvs part 
+        flash_erase(zb_para_dev, ZB_NVS_START_ADR, ZB_NVS_SEC_SIZE);
+#if APP_LIGHT_USER_MODE_EN
+#if CONFIG_STARTUP_OPTIMIZATE
+        // Need to erase cluster para part 
+        flash_erase(cluster_para_dev, USER_CLUSTER_PARTITION_OFFSET, USER_CLUSTER_PARTITION_SIZE);
+#endif
+#endif
+
+        printk("Factory reset triggered by button, resetting to Zigbee mode");
+
+        chip::Server::GetInstance().ScheduleFactoryReset();
+    }
+}
+
+void AppTaskCommon::FactoryResetTimerTimeoutCallback(k_timer * timer)
+{
+    if (!timer)
+    {
+        return;
+    }
+
+    AppEvent event;
+    event.Type    = AppEvent::kEventType_Timer;
+    event.Handler = FactoryResetTimerEventHandler;
+    GetAppTask().PostEvent(&event);
+}
+
+
+void SwitchBackToZigbee()
+{
+    uint8_t switch_flag  = USER_MATTER_BACK_ZB;
+    //flash_erase(flash_para_dev, USER_PARTITION_OFFSET, USER_PARTITION_SIZE);
+    flash_write(flash_para_dev,USER_PARTITION_OFFSET,&switch_flag,1);
+    sys_reboot(0);
+}
+
+void AppTaskCommon::DnssTimerTimeoutCallback(k_timer * timer)
+{
+    if (!timer)
+    {
+        return;
+    }
+    printk("Matter: DnssTimer expired.\r\n");
+    /*If initialization of Dnss takes longer than 90 seconds, the device will reboot and revert to Zigbee mode*/
+    if (sBoot_zb){
+         SwitchBackToZigbee();
+    }
+}
+
+
+void AppTaskCommon::FactoryResetTimerEventHandler(AppEvent * aEvent)
+{
+    if (aEvent->Type != AppEvent::kEventType_Timer)
+    {
+        return;
+    }
+
+    sFactoryResetCntr = 0;
+    LOG_INF("Factory Reset Trigger Counter is cleared");
+}
+
+#if CHIP_DEVICE_CONFIG_ENABLE_THREAD
+void AppTaskCommon::StartThreadButtonEventHandler(void)
+{
+    AppEvent event;
+
+    event.Type               = AppEvent::kEventType_Button;
+    event.ButtonEvent.Action = kButtonPushEvent;
+    event.Handler            = StartThreadHandler;
+    GetAppTask().PostEvent(&event);
+}
+
+void AppTaskCommon::StartThreadHandler(AppEvent * aEvent)
+{
+    LOG_INF("StartThreadHandler");
+    if (!sIsNetworkProvisioned)
+    {
+        // Switch context from BLE to Thread
+#if CHIP_DEVICE_CONFIG_ENABLE_CHIPOBLE
+        Internal::BLEManagerImpl sInstance;
+        sInstance.SwitchToIeee802154();
+#else
+        ThreadStackMgrImpl().SetRadioBlocked(false);
+        ThreadStackMgrImpl().SetThreadEnabled(true);
+#endif
+        StartDefaultThreadNetwork();
+    }
+    else
+    {
+        LOG_INF("Device already commissioned");
+    }
+}
+
+#elif CHIP_DEVICE_CONFIG_ENABLE_WIFI
+void AppTaskCommon::StartWiFiButtonEventHandler(void)
+{
+    AppEvent event;
+
+    event.Type               = AppEvent::kEventType_Button;
+    event.ButtonEvent.Action = kButtonPushEvent;
+    event.Handler            = StartWiFiHandler;
+    GetAppTask().PostEvent(&event);
+}
+
+void AppTaskCommon::StartWiFiHandler(AppEvent * aEvent)
+{
+    LOG_INF("StartWiFiHandler");
+
+    if (!strlen(CONFIG_DEFAULT_WIFI_SSID) || !strlen(CONFIG_DEFAULT_WIFI_PASSWORD))
+    {
+        LOG_ERR("default WiFi SSID/Password are not set");
+    }
+
+    if (!sIsNetworkProvisioned)
+    {
+        net_if_up(InetUtils::GetWiFiInterface());
+        NetworkCommissioning::TelinkWiFiDriver().StartDefaultWiFiNetwork();
+    }
+    else
+    {
+        LOG_INF("Device already commissioned");
+    }
+}
+#endif
+
+void AppTaskCommon::ExampleActionButtonEventHandler(void)
+{
+    AppEvent event;
+
+    if (!GetAppTask().ExampleActionEventHandler)
+    {
+        return;
+    }
+
+    event.Type               = AppEvent::kEventType_Button;
+    event.ButtonEvent.Action = kButtonPushEvent;
+    event.Handler            = GetAppTask().ExampleActionEventHandler;
+    GetAppTask().PostEvent(&event);
+}
+
+void AppTaskCommon::SetExampleButtonCallbacks(EventHandler aAction_CB)
+{
+    ExampleActionEventHandler = aAction_CB;
+}
+
+void AppTaskCommon::OtaEventsHandler(const ChipDeviceEvent * event)
+{
+    switch (event->OtaStateChanged.newState)
+    {
+    case DeviceLayer::kOtaDownloadInProgress:
+        ChipLogProgress(DeviceLayer, "OTA image download in progress\n");
+        break;
+    case DeviceLayer::kOtaDownloadComplete:
+        ChipLogProgress(DeviceLayer, "OTA image download complete\n");
+        break;
+    case DeviceLayer::kOtaDownloadFailed:
+        ChipLogProgress(DeviceLayer, "OTA image download failed\n");
+        break;
+    case DeviceLayer::kOtaDownloadAborted:
+        ChipLogProgress(DeviceLayer, "OTA image download aborted\n");
+        break;
+    case DeviceLayer::kOtaApplyInProgress:
+        ChipLogProgress(DeviceLayer, "OTA image apply in progress\n");
+        break;
+    case DeviceLayer::kOtaApplyComplete:
+        ChipLogProgress(DeviceLayer, "OTA image apply complete\n");
+        AppTaskCommon::OtaSetAnaFlag(); // set flag when ota apply complete.
+        break;
+    case DeviceLayer::kOtaApplyFailed:
+        ChipLogProgress(DeviceLayer, "OTA image apply failed\n");
+        break;
+    default:
+        break;
+    }
+}
+
+k_timer KOtaQueryImageTimer;
+constexpr int KOtaQueryImageTimeout = 120000; // for init will cost for about 120s
+void KOtaQueryImageTimerTimeoutCallback(k_timer * timer)
+{
+    LOG_INF("=======proc KOtaQueryImageTimerTimeoutCallback\n");
+    InitBasicOTARequestor();
+    chip::OTARequestorInterface * requestor = chip::GetRequestorInstance();
+    if (chip::Server::GetInstance().GetFabricTable().FabricCount() != 0)
+    {
+        // Schedule a query. At the end of this query/update process the Default Provider timer is started
+        chip::DeviceLayer::SystemLayer().ScheduleLambda([requestor] { requestor->TriggerImmediateQuery(); });
+        // GetRequestorInstance()->TriggerImmediateQuery();
+    }
+}
+
+int KOtaQueryImageTimer_proc(void)
+{
+    k_timer_init(&KOtaQueryImageTimer, &KOtaQueryImageTimerTimeoutCallback, nullptr);
+    k_timer_start(&KOtaQueryImageTimer, K_MSEC(KOtaQueryImageTimeout), K_NO_WAIT);
+    LOG_INF("=======KOtaQueryImageTimer start\n");
+
+    return 1;
+}
+
+void AppTaskCommon::Get_Startup_Cluster_Info(void)
+{
+    cluster_startup_para * p_para = &g_light_cluster_para;
+
+    Protocols::InteractionModel::Status status;
+
+    // onoff cluster
+    bool tmpOnOff;
+    status = Clusters::OnOff::Attributes::OnOff::Get(1, &(tmpOnOff));
+
+    if (status == Protocols::InteractionModel::Status::Success)
+    {
+        p_para->onOff = tmpOnOff;
+    }
+    else
+    {
+        p_para->onOff = 1;
+    }
+
+    DataModel::Nullable<chip::app::Clusters::OnOff::StartUpOnOffEnum> tmpStartUpOnOff;
+    status = Clusters::OnOff::Attributes::StartUpOnOff::Get(1, (tmpStartUpOnOff));
+
+    if (status == Protocols::InteractionModel::Status::Success && !tmpStartUpOnOff.IsNull())
+    {
+        p_para->startUpOnOff = (uint8_t) (tmpStartUpOnOff.Value());
+    }
+    else
+    {
+        p_para->startUpOnOff = 0xff;
+    }
+
+    // level cluster
+    app::DataModel::Nullable<uint8_t> tmpCurrentLevel;
+    status = Clusters::LevelControl::Attributes::CurrentLevel::Get(1, (tmpCurrentLevel));
+
+    if (status == Protocols::InteractionModel::Status::Success && !tmpCurrentLevel.IsNull())
+    {
+        p_para->currentLevel = tmpCurrentLevel.Value();
+    }
+    else
+    {
+        p_para->currentLevel = 254;
+    }
+
+    uint8_t tmpMinLevel;
+    status = Clusters::LevelControl::Attributes::MinLevel::Get(1, &(tmpMinLevel));
+
+    if (status != Protocols::InteractionModel::Status::Success)
+    {
+        p_para->minLevel = tmpMinLevel;
+    }
+    else
+    {
+        p_para->minLevel = 1;
+    }
+
+    uint8_t tmpMaxLevel;
+    status = Clusters::LevelControl::Attributes::MaxLevel::Get(1, &(tmpMaxLevel));
+
+    if (status != Protocols::InteractionModel::Status::Success)
+    {
+        p_para->maxLevel = tmpMaxLevel;
+    }
+    else
+    {
+        p_para->maxLevel = 254;
+    }
+
+    DataModel::Nullable<uint8_t> tmpStartUpCurrentLevel;
+    status = Clusters::LevelControl::Attributes::StartUpCurrentLevel::Get(1, (tmpStartUpCurrentLevel));
+
+    if (status == Protocols::InteractionModel::Status::Success && !tmpStartUpCurrentLevel.IsNull())
+    {
+        p_para->startUpCurrentLevel = tmpStartUpCurrentLevel.Value();
+    }
+    else
+    {
+        p_para->startUpCurrentLevel = 0xff;
+    }
+
+    // color control cluster
+#ifdef EXTENDEDCOLOR_LIGHT
+    uint8_t tmpCurrentHue;
+    status = Clusters::ColorControl::Attributes::CurrentHue::Get(1, &(tmpCurrentHue));
+
+    if(status == Protocols::InteractionModel::Status::Success)
+    {
+        p_para->currentHue = tmpCurrentHue;
+    }
+
+    uint8_t tmpCurrentSaturation;
+    status = Clusters::ColorControl::Attributes::CurrentSaturation::Get(1, &(tmpCurrentSaturation));
+
+     if(status == Protocols::InteractionModel::Status::Success)
+    {
+        p_para->currentSaturation = tmpCurrentSaturation;
+    }
+
+    uint16_t tmpCurrentX;
+    status = Clusters::ColorControl::Attributes::CurrentX::Get(1, &(tmpCurrentX));
+
+    if(status == Protocols::InteractionModel::Status::Success)
+    {
+        p_para->currentX = tmpCurrentX;
+    }
+
+    uint16_t tmpCurrentY;
+    status = Clusters::ColorControl::Attributes::CurrentY::Get(1, &(tmpCurrentY));
+
+    if(status == Protocols::InteractionModel::Status::Success)
+    {
+        p_para->currentY = tmpCurrentY;
+    }
+#endif
+
+#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
+    uint16_t tmpColorTemperatureMireds;
+    status = Clusters::ColorControl::Attributes::ColorTemperatureMireds::Get(1, &(tmpColorTemperatureMireds));
+
+    if(status == Protocols::InteractionModel::Status::Success)
+    {
+        p_para->colorTemperatureMireds = tmpColorTemperatureMireds;
+    }
+
+    uint8_t tmpColorMode;
+    status = Clusters::ColorControl::Attributes::ColorMode::Get(1, &(tmpColorMode));
+
+    if(status == Protocols::InteractionModel::Status::Success)
+    {
+        p_para->colorMode = tmpColorMode;
+    }
+#endif
+
+#ifdef EXTENDEDCOLOR_LIGHT
+    uint16_t tmpEnhancedCurrentHue;
+    status = Clusters::ColorControl::Attributes::EnhancedCurrentHue::Get(1, &(tmpEnhancedCurrentHue));
+
+    if(status == Protocols::InteractionModel::Status::Success)
+    {
+        p_para->enhancedCurrentHue = tmpEnhancedCurrentHue;
+    }
+
+    uint8_t tmpEnhancedColorMode;
+    status = Clusters::ColorControl::Attributes::EnhancedColorMode::Get(1, &(tmpEnhancedColorMode));
+
+    if(status == Protocols::InteractionModel::Status::Success)
+    {
+        p_para->enhancedColorMode = tmpEnhancedColorMode;
+    }
+#endif
+
+#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
+    DataModel::Nullable<uint16_t> tmpStartUpColorTemperatureMireds;
+    status = Clusters::ColorControl::Attributes::StartUpColorTemperatureMireds::Get(1, (tmpStartUpColorTemperatureMireds));
+
+    if (status == Protocols::InteractionModel::Status::Success && !tmpStartUpColorTemperatureMireds.IsNull())
+    {
+        p_para->startUpColorTemperatureMireds = tmpStartUpColorTemperatureMireds.Value();
+    }
+    else
+    {
+        p_para->startUpColorTemperatureMireds = 0xffff;
+    }
+#endif
+
+    if (store_cluster_para(p_para) != 0)
+    {
+        LDS_LOG_E("[ChipEventHandler] Fail store startup cluster para\n");
+    }
+}
+void AppTaskCommon::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */)
+{
+    switch (event->Type)
+    {
+    case DeviceEventType::kCHIPoBLEAdvertisingChange:
+        sHaveBLEConnections = ConnectivityMgr().NumBLEConnections() != 0;
+        UpdateStatusLED();
+#ifdef CONFIG_CHIP_NFC_COMMISSIONING
+        if (event->CHIPoBLEAdvertisingChange.Result == kActivity_Started)
+        {
+            if (NFCMgr().IsTagEmulationStarted())
+            {
+                LOG_INF("NFC Tag emulation is already started");
+            }
+            else
+            {
+                ShareQRCodeOverNFC(chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kBLE));
+            }
+        }
+        else if (event->CHIPoBLEAdvertisingChange.Result == kActivity_Stopped)
+        {
+            NFCMgr().StopTagEmulation();
+        }
+#endif
+        break;
+     case DeviceEventType::kCommissioningComplete: {
+        unsigned char val = USER_MATTER_PAIR_VAL;
+        /* just a demo to show how to change the cluster after commission , only in the zb switch and touchlink is paired*/
+        #if 0
+        if(user_para.val == USER_ZB_SW_VAL && user_para.on_net ){
+            Protocols::InteractionModel::Status status;
+            /* Switch from the touch link, need to restore previous values */ 
+            status = Clusters::OnOff::Attributes::OnOff::Set(kExampleEndpointId, light_para.onoff);
+            if (status != Protocols::InteractionModel::Status::Success)
+            {
+                LOG_ERR("Update OnOff fail: %x", to_underlying(status));
+            }
+            status = Clusters::LevelControl::Attributes::CurrentLevel::Set(kExampleEndpointId, light_para.level);
+            {
+                LOG_ERR("Update brightness fail: %x", to_underlying(status));
+            }
+        }
+        #endif
+        sBoot_zb = 0;
+        flash_erase(flash_para_dev, USER_PARTITION_OFFSET, USER_PARTITION_SIZE);
+        flash_write(flash_para_dev, USER_PARTITION_OFFSET, &val, 1);
+#if APP_LIGHT_USER_MODE_EN
+#if CONFIG_STARTUP_OPTIMIZATE
+        Get_Startup_Cluster_Info();
+#endif
+#endif
+        printk("Commissioning complete, set Matter commissionined flag");
+        ldsLightEffectJionNetworkStart();
+   }
+        break;
+    case DeviceEventType::kFailSafeTimerExpired: {
+        /* Erase and reset to Zigbee mode if commissioning fails */
+        if (sBoot_zb)
+        {
+            printk("FailSafeTimer expired, Matter commissioning failed, rebooting to Zigbee mode.\r\n");
+            SwitchBackToZigbee();
+        }
+        printk("FailSafeTimer expired, Matter commissioning failed.\r\n");
+   }
+        break;
+#if CHIP_DEVICE_CONFIG_ENABLE_THREAD
+    case DeviceEventType::kDnssdInitialized:
+#if CONFIG_CHIP_OTA_REQUESTOR
+        InitBasicOTARequestor();
+        {
+            // metadata is only 1(debug firmware) and 2(develop firmware) and null(product firmware).
+            // other values are illegal.
+            static uint8_t metadata                 = MATTER_FW_TYPE;
+            chip::OTARequestorInterface * requestor = chip::GetRequestorInstance();
+            if ((metadata == FW_TYPE_DEBUG) || (metadata == FW_TYPE_DEVELOP))
+            {
+                printk("set metadata start");
+                requestor->SetMetadataForProvider(chip::ByteSpan(&metadata, 1));
+                printk("set metadata end");
+            }else{
+                // metadata is is null(product firmare) as default.
+            }
+            KOtaQueryImageTimer_proc();
+        }
+        if (GetRequestorInstance()->GetCurrentUpdateState() == Clusters::OtaSoftwareUpdateRequestor::OTAUpdateStateEnum::kIdle)
+        {
+#endif
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+            OtaConfirmNewImage();
+#endif /* CONFIG_BOOTLOADER_MCUBOOT */
+#if CONFIG_CHIP_OTA_REQUESTOR
+        }
+#endif
+    if(sBoot_zb){
+            k_timer_stop(&sDnssTimer);
+            printk("Dnss Timer stopped, Matter commissioning kDnssdInitialized.\r\n");
+    }
+        break;
+    case DeviceEventType::kThreadStateChange:
+        sIsNetworkProvisioned = ConnectivityMgr().IsThreadProvisioned();
+        sIsNetworkEnabled     = ConnectivityMgr().IsThreadEnabled();
+        sIsNetworkAttached    = ConnectivityMgr().IsThreadAttached();
+#elif CHIP_DEVICE_CONFIG_ENABLE_WIFI
+    case DeviceEventType::kWiFiConnectivityChange:
+        sIsNetworkProvisioned = ConnectivityMgr().IsWiFiStationProvisioned();
+        sIsNetworkEnabled     = ConnectivityMgr().IsWiFiStationEnabled();
+        sIsNetworkAttached    = ConnectivityMgr().IsWiFiStationConnected();
+#if CONFIG_CHIP_OTA_REQUESTOR
+        if (event->WiFiConnectivityChange.Result == kConnectivity_Established)
+        {
+            InitBasicOTARequestor();
+        }
+#endif
+#endif /* CHIP_DEVICE_CONFIG_ENABLE_THREAD */
+#if CONFIG_CHIP_ENABLE_APPLICATION_STATUS_LED
+        UpdateStatusLED();
+#endif
+        break;
+    case DeviceEventType::kOtaStateChanged:
+        AppTaskCommon::OtaEventsHandler(event);
+        break;
+    default:
+        break;
+    }
+}
+
+void AppTaskCommon::PostEvent(AppEvent * aEvent)
+{
+    if (!aEvent)
+        return;
+    if (k_msgq_put(&sAppEventQueue, aEvent, K_NO_WAIT) != 0)
+    {
+        LOG_INF("PostEvent fail");
+    }
+}
+
+void AppTaskCommon::DispatchEvent(AppEvent * aEvent)
+{
+    if (!aEvent)
+        return;
+    if (aEvent->Handler)
+    {
+        aEvent->Handler(aEvent);
+    }
+    else
+    {
+        LOG_INF("Dropping event without handler");
+    }
+}
+
+void AppTaskCommon::GetEvent(AppEvent * aEvent)
+{
+    k_msgq_get(&sAppEventQueue, aEvent, K_FOREVER);
+}

@@ -1,0 +1,320 @@
+[
+    {
+      "offset": "0x00",
+      "sizeB": 1,
+      "data": "0x01",
+      "description": "Token Info: token version, uint 8"
+    },
+
+    {
+      "offset": "",
+      "sizeB": 2,
+      "data":"0xFF,0xFF",
+      "description": "Device Info: Image type, uint16"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x00",
+      "description": "Device Info:Default key(0x00) or Master key(0x01), uint8"
+    },
+	{
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x01",   
+      "description": "Driver mode: Select the drive mode PWM(0x00) or I2C(0x01), uint8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x00",   
+      "description": "Driver mode: Select I2C type: KP18056(0x00),KP18057(0x01), uint8"
+    },
+
+    {
+      "offset": "",
+      "sizeB": 32,
+      "data": "KAJPLATS bulb E14 WS globe 470lm",
+      "description": "Zigbee info: Basic Cluster Model Identifier, 32 Char"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x01",
+      "description": "Zigbee info: Basic Cluster Hardware Version, uint 8"
+    },
+    {
+      "offset": "",
+      "sizeB": 16,
+      "data": "LED2024",
+      "description": "Zigbee info: Basic Cluster Product Code, 16 Octet"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+       "data": "0x02",
+      "description": "Zigbee info: Configuration of Product Type, uint 8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x00",
+      "description": "Zigbee info: Basic Cluster Generic Device Class, uint 8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x05",
+      "description": "Zigbee info: Basic Cluster Generic Device type, uint 8"
+    },
+   
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0xFF",
+      "description": "Power settings: ZLL RSSI threshold limit for commissioning, uint 8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0xFF",
+      "description": "Power settings: TX power to use for joining a network, int 8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0xFF",
+      "description": "Power settings: TX power to use for channel 26, uint8"
+    },
+
+    {
+      "offset": "",
+      "sizeB": 5,
+      "data": "0xFF,0xFF,0xFF,0xFF,0xFF",
+      "description": "PWM settings: PWM pins,  uint 16"
+    },
+    {
+      "offset": "",
+      "sizeB": 2,
+      "data": "0xFF,0xFF",
+      "description": "PWM settings: PWM frequency, uint 16"
+    },
+    {
+      "offset": "",
+      "sizeB": 2,
+      "data": "0x0A,0x00",
+      "description": "PWM settings: PWM min duty cycle, uint 16"
+    },
+    {
+      "offset": "",
+      "sizeB": 2,
+      "data": "0xE8,0x03",
+      "description": "PWM settings: PWM max duty cycle, uint 16"
+    },
+
+    {
+      "offset": "",
+      "sizeB": 2,
+      "data": "0xFF,0xFF",
+      "description": "Reset settings: power toggle time active limit, uint 16"
+    },
+
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0xFF",
+      "description": "Protection settings: Adc collect input pin,uint 8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x69",
+      "description": "Protection settings: Over temperature threshold, uint 8"
+    },
+    {
+      "offset": "",
+      "sizeB": 2,
+      "data": "0xFF,0xFF",
+      "description": "Protection settings: Limit reduce duty cycle, uint 16"
+    },
+
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x4F",
+      "description": "Color temperature percentage: 2700k affect brightness percentage, uint 8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x2A",
+      "description": "Color temperature percentage: 4000k affect brightness percentage, uint 8"
+    },
+    
+    {
+      "offset": "",
+      "sizeB": 2,
+      "data": "0x99,0x00",
+      "description": "Color temperature mireds: Setting the min color temperature mireds of light source, uint16"
+    },
+    {
+      "offset": "",
+      "sizeB": 2,
+      "data": "0xC6,0x01",
+      "description": "Color temperature mireds: Setting the max color temperature mireds of light source, uint16"
+    },
+    {
+      "offset": "",
+      "sizeB": 2,
+      "data": "0x72,0x01",
+      "description": "Color temperature mireds: Setting the default color temperature mireds, uint16"
+    },
+
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x01",
+      "description": "CCT Driver mode:  MOS(0x00) or DCDC(0x01) or, uint 8"
+    },
+
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x14",
+      "description": "I2C Settings: I2C R max current set, uint8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x14",
+      "description": "I2C Settings: I2C G max current set, uint8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x14",
+      "description": "I2C Settings: I2C B max current set, uint8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x3E",
+      "description": "I2C Settings: I2C WW max current set, uint8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x3E",
+      "description": "I2C Settings: I2C CW max current set, uint8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0xFF",
+      "description": "I2C Settings: I2C standby voltage threshold set, uint8"
+    },
+    {
+      "offset": "",
+      "sizeB": 5,
+      "data": "0x02,0x01,0x00,0x03,0x04",
+      "description": "I2C Settings: I2C out pin set, uint16"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x8E",
+      "description": "I2C Settings: the dimming mode(analog/choppe) and LED threshold value set, uint8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0xFF",
+      "description": "I2C Settings: RGB dimming mode set, uint8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0xBE",
+      "description": "I2C Settings: otp and ovp threshold value set, uint8"
+    },
+    {
+      "offset": "",
+      "sizeB": 10,
+      "data": "0x10,0x27,0x10,0x27,0x10,0x27,0x10,0x27,0x10,0x27",
+      "description": "I2C Settings: , When the i2c chip can't set to the maximum current value required by the light source. current = maximum current * gray_scale, uint16"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0xFF",
+      "description": "I2C Settings: , i2c chopping frequency, uint8"
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0xFF",
+      "description": "I2C Settings: , i2c LEDminl threshold setting, uint8"
+    },
+
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x04",
+      "description": "Onoff Setttings: config on transition time (ds) ,uint8_t" 
+    },
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x04",
+      "description": "Onoff Setttings: config off transition time (ds) ,uint8_t" 
+    },
+
+    {
+      "offset": "",
+      "sizeB": 1,
+      "data": "0x05",
+      "description": "Light source type: Determine rgb, rgbw or rgbtw, uint8" 
+    },
+    {
+      "offset": "",
+      "sizeB": 28,
+      "data": "0x00, 0x00, 0x00, 0x00,  0x8E, 0x75, 0x21, 0x3F,  0x00, 0x00, 0x00, 0x00, 0x7A, 0xAB, 0x36, 0x3E,  0x00, 0x00, 0x00, 0x00,  0xA4, 0xF0, 0x5F, 0x42, 0x9A, 0x99, 0xB9, 0x3F",
+      "description": "Color param: CWS R light source param, 28char" 
+    },
+    {
+      "offset": "",
+      "sizeB": 28,
+      "data": "0x00, 0x00, 0x00, 0x00,  0x52, 0x49, 0x9D, 0x3E,  0x00, 0x00, 0x00, 0x00, 0xD0, 0xD5, 0x16, 0x3F,  0x00, 0x00, 0x00, 0x00,  0x85, 0xEB, 0x2C, 0x43, 0x9A, 0x99, 0xB9, 0x3F",
+      "description": "Color param: CWS G light source param, 28char" 
+    },
+    {
+      "offset": "",
+      "sizeB": 28,
+      "data": "0x00, 0x00, 0x00, 0x00,  0x51, 0x6B, 0x1A, 0x3E,  0x00, 0x00, 0x00, 0x00, 0xDF, 0x4F, 0x8D, 0x3D, 0x00, 0x00, 0x00, 0x00,  0x3D, 0x0A, 0x29, 0x42, 0x9A, 0x99, 0xB9, 0x3F",
+      "description": "Color param: CWS B light source param, 28char" 
+    },
+    {
+      "offset": "",
+      "sizeB": 28,
+      "data": "0x00, 0x00, 0x00, 0x00, 0x38, 0xF8, 0x02, 0x3F,  0x00, 0x00, 0x00, 0x00,  0xC1, 0xCA, 0xE1, 0x3E, 0x00, 0x00, 0x00, 0x00,  0x7B, 0x04, 0x29, 0x44,  0x00 0x00,0xA0,  0x40",
+      "description": "Color param: CWS WW light source param, 28char" 
+    },
+    {
+      "offset": "",
+      "sizeB": 28,
+      "data": "0x00, 0x00, 0x00, 0x00, 0x2D, 0xB2, 0x9D, 0x3E, 0x00, 0x00, 0x00, 0x00,  0xFC, 0x18, 0xB3, 0x3E, 0x00, 0x00, 0x00, 0x00,  0x3D, 0x1A, 0x2D, 0x44, 0x00 0x00,0xA0,  0x40",
+      "description": "Color param: CWS CW light source param, 28char" 
+    },
+    {
+      "offset": "",
+      "sizeB": 4,
+      "data": "0x00, 0x00, 0x00, 0x40",
+      "description": "Color param: CWS RGB power limit, 4 char" 
+    },
+    {
+      "offset": "",
+      "sizeB": 4,
+      "data": "0x00 0x00,0xA0,  0x40",
+      "description": "Color param: CWS total power limit, 4 char" 
+    }
+]

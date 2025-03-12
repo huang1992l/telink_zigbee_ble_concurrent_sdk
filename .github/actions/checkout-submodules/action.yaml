@@ -1,0 +1,28 @@
+name: Checkout submodules
+description: Checkout submodules
+inputs:
+  token:
+    description: 'GitHub token for accessing private submodules'
+    required: true
+  extra-parameters:
+    description: "extra parameters"
+    required: false
+    default: ""
+  platform:
+    description: "Platform name"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Check token
+      shell: bash
+      run: |
+        echo "Testing access to private repository 'telink_matter_lighting_cbb' with provided GitHub token..."
+        curl -H "Authorization: token ${{ inputs.token }}" https://api.github.com/repos/happiest666/telink_matter_lighting_cbb
+
+    - uses: Wandalen/wretry.action@v1.4.10
+      name: Checkout submodules
+      with:
+        command: scripts/checkout_submodules.py --allow-changing-global-git-config --shallow --platform ${{ inputs.platform }} --token ${{ inputs.token }} ${{ inputs.extra-parameters }}
+        attempt_limit: 3
+        attempt_delay: 2000
