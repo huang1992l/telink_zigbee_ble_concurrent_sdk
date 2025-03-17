@@ -195,32 +195,32 @@ if (CONFIG_BOOTLOADER_MCUBOOT)
         message(WARNING "File ${ZB_FILE_PATH} does not exist. merge_zigbee target will not be created.")
     endif()
 
-    add_custom_target(merge_mcuboot ALL
-        COMMAND
-        dd if=${PROJECT_BINARY_DIR}/zephyr.mcuboot.bin of=${PROJECT_BINARY_DIR}/zephyr.bin
-        COMMAND
-        dd if=${PROJECT_BINARY_DIR}/zephyr.signed.bin of=${PROJECT_BINARY_DIR}/zephyr.bin bs=${BLOCK_SIZE} seek=${boot_blocks}
-    )
+    # add_custom_target(merge_mcuboot ALL
+    #     COMMAND
+    #     dd if=${PROJECT_BINARY_DIR}/zephyr.mcuboot.bin of=${PROJECT_BINARY_DIR}/zephyr.bin
+    #     COMMAND
+    #     dd if=${PROJECT_BINARY_DIR}/zephyr.signed.bin of=${PROJECT_BINARY_DIR}/zephyr.bin bs=${BLOCK_SIZE} seek=${boot_blocks}
+    # )
 
     if(EXISTS ${ZB_FILE_PATH})
         add_dependencies(merge_zigbee ${ZEPHYR_FINAL_EXECUTABLE})
         add_dependencies(west_sign merge_zigbee)
-        add_dependencies(merge_mcuboot west_sign)
+        # add_dependencies(merge_mcuboot west_sign)
     else()
-        add_dependencies(merge_mcuboot ${ZEPHYR_FINAL_EXECUTABLE})
+        # add_dependencies(merge_mcuboot ${ZEPHYR_FINAL_EXECUTABLE})
     endif()
 
-if (CONFIG_CHIP_OTA_IMAGE_BUILD)
-    chip_ota_image(chip-ota-image
-        INPUT_FILES ${PROJECT_BINARY_DIR}/zephyr.signed.bin
-        OUTPUT_FILE ${PROJECT_BINARY_DIR}/zephyr-ota.bin
-    )
-    if(EXISTS ${ZB_FILE_PATH})
-        add_dependencies(chip-ota-image west_sign)
-    else()
-        add_dependencies(chip-ota-image ${ZEPHYR_FINAL_EXECUTABLE})
-    endif()
-endif()
+# if (CONFIG_CHIP_OTA_IMAGE_BUILD)
+#     chip_ota_image(chip-ota-image
+#         INPUT_FILES ${PROJECT_BINARY_DIR}/zephyr.signed.bin
+#         OUTPUT_FILE ${PROJECT_BINARY_DIR}/zephyr-ota.bin
+#     )
+#     if(EXISTS ${ZB_FILE_PATH})
+#         add_dependencies(chip-ota-image west_sign)
+#     else()
+#         add_dependencies(chip-ota-image ${ZEPHYR_FINAL_EXECUTABLE})
+#     endif()
+# endif()
 endif()
 
 # generate token.bin based on custom json data
