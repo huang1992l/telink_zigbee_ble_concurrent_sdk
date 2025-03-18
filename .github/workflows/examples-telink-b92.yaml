@@ -70,7 +70,7 @@ jobs:
           scripts/run_in_build_env.sh \
             "pip3 install requests &&  pip3 install pyyaml && python3 \
             scripts/tools/telink/update_zephyr.py \
-            2f263bd6880520671caa8d17ffb7eafe6df9bee0 \
+            6efc7806528f1217179a054039a829adb88452cc \
             https://github.com/Leedarson-SmartLighting/matter-telink-light-zephyr \
             --token $MATTER_TOKEN"
 
