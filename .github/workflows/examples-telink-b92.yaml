@@ -36,7 +36,7 @@ jobs:
     env:
       BUILD_TYPE: telink
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     if: github.actor != 'restyled-io[bot]'
 
     container:
@@ -83,9 +83,56 @@ jobs:
             out/telink-tlsr9528a-light-ota-4mb/zephyr/zephyr.elf \
             /tmp/bloat_reports/
           cp out/telink-tlsr9528a-light-ota-4mb/zephyr/zephyr.bin \
-            /tmp/telink_build_artifacts/telink-tlsr9528a-light-ota-4mb.bin
+            /tmp/telink_build_artifacts/telinkLightAppFW_65521_36864_1.1.15.bin
           cp out/telink-tlsr9528a-light-ota-4mb/zephyr/zephyr.mcuboot.bin \
-            /tmp/telink_build_artifacts/zephyr.mcuboot.bin
+            /tmp/telink_build_artifacts/telinkLightBtl_65521_36864_1.1.15.bin
+
+      - name: Generate checksum
+        id: checksha256
+        run: |
+          cd /tmp/telink_build_artifacts
+          appfw_sha256=$(openssl sha256 -binary telinkLightAppFW_65521_36864_1.1.15.bin | base64)
+          btl_sha256=$(openssl sha256 -binary telinkLightBtl_65521_36864_1.1.15.bin | base64)
+          echo "appfw_sha256=$appfw_sha256" >> $GITHUB_OUTPUT
+          echo "btl_sha256=$btl_sha256" >> $GITHUB_OUTPUT
+
+      - name: Upload ota file
+        uses: inter-ikea/rs-hs-shipit-actions/upload-file@main
+        id: otafile
+        with:
+          file_path: "/tmp/telink_build_artifacts/telinkLightAppFW_65521_36864_1.1.15.bin"
+          api_key: ${{ secrets.SHIPIT_API_KEY }}
+          api_url: ${{ vars.SHIPIT_URL }}
+          friendlyName: "telinkLightAppFW_65521_36864_1.1.15.bin"
+          version: "1"
+          versionType: "INTEGER"
+          checksum: ${{ steps.checksha256.outputs.appfw_sha256 }}
+          checksumAlgorithm: "SHA256"
+          labels: "otafile" # important
+
+      - name: Upload bootloader file
+        uses: inter-ikea/rs-hs-shipit-actions/upload-file@main
+        id: btlfile
+        with:
+          file_path: "/tmp/telink_build_artifacts/telinkLightBtl_65521_36864_1.1.15.bin"
+          api_key: ${{ secrets.SHIPIT_API_KEY }}
+          api_url: ${{ vars.SHIPIT_URL }}
+          friendlyName: "telinkLightBtl_65521_36864_1.1.15.bin"
+          version: "1"
+          versionType: "INTEGER"
+          checksum: ${{ steps.checksha256.outputs.btl_sha256 }}
+          checksumAlgorithm: "SHA256"
+          labels: "btlfile" # important
+
+      - name: Start Telink signing
+        uses: ./start-telink-silabs-signing
+        id: start-telink-silabs-signing
+        with:
+          api_key: ${{ secrets.SHIPIT_API_KEY }}
+          api_url: ${{ vars.SHIPIT_URL }}
+          ota_file: ${{ steps.otafile.outputs.id }}
+          btl_file: ${{ steps.btlfile.outputs.id }}
+          key_variant: "PROD"
 
       - name: clean out build output
         run: rm -rf ./out
