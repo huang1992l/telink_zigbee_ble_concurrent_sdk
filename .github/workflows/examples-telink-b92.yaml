@@ -31,7 +31,7 @@ env:
   CHIP_NO_LOG_TIMESTAMPS: true
 
 jobs:
-  telink:
+  build:
     name: Telink
     env:
       BUILD_TYPE: telink
@@ -87,6 +87,38 @@ jobs:
           cp out/telink-tlsr9528a-light-ota-4mb/zephyr/zephyr.mcuboot.bin \
             /tmp/telink_build_artifacts/telinkLightBtl_65521_36864_1.1.15.bin
 
+      - name: clean out build output
+        run: rm -rf ./out
+
+      - name: Uploading Size Reports
+        uses: ./.github/actions/upload-size-reports
+        if: ${{ !env.ACT }}
+        with:
+          platform-name: Telink
+
+      - name: Publish artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: telink-examples
+          path: |
+            /tmp/telink_build_artifacts/*
+
+  upload:
+    name: Upload example
+    needs: build
+    runs-on: ubuntu-22.04
+     
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: telink-examples
+          path: /tmp/telink_build_artifacts
+ 
+      - name: Debug file existence
+        run: |
+          ls -la "/tmp/telink_build_artifacts/"
+
       - name: Generate checksum
         id: checksha256
         run: |
@@ -133,19 +165,3 @@ jobs:
           ota_file: ${{ steps.otafile.outputs.id }}
           btl_file: ${{ steps.btlfile.outputs.id }}
           key_variant: "PROD"
-
-      - name: clean out build output
-        run: rm -rf ./out
-
-      - name: Uploading Size Reports
-        uses: ./.github/actions/upload-size-reports
-        if: ${{ !env.ACT }}
-        with:
-          platform-name: Telink
-
-      - name: Publish artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: telink-examples,${{ github.event_name }}
-          path: |
-            /tmp/telink_build_artifacts/*
