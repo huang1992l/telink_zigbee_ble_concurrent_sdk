@@ -177,7 +177,7 @@ jobs:
           labels: "cfgfile" # important
 
       - name: Start Telink signing
-        uses: ./start-matter-telink-signing
+        uses: inter-ikea/rs-hs-shipit-actions/start-matter-telink-signing@main
         id: start-matter-telink-signing
         with:
           api_key: ${{ secrets.SHIPIT_API_KEY }}

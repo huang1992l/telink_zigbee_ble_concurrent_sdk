@@ -65,6 +65,10 @@
 #include "lds_color_algorithm.h"
 #endif
 
+#include <stdio.h>
+
+volatile unsigned char githubnumber = 28;
+
 LOG_MODULE_REGISTER(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
 using namespace ::chip;
@@ -474,6 +478,8 @@ int main(void)
     }
 #endif
 #endif
+
+    printf("GitHub Number: %d\n", githubnumber);
 
     err = chip::Platform::MemoryInit();
     if (err != CHIP_NO_ERROR)
