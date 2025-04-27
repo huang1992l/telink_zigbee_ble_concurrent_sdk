@@ -70,7 +70,7 @@ jobs:
           scripts/run_in_build_env.sh \
             "pip3 install requests &&  pip3 install pyyaml && python3 \
             scripts/tools/telink/update_zephyr.py \
-            140a670c6b410d84ad9fa9a50f9df5bda538b7f9 \
+            9785bf8d93c14d8aff324e8586303687a63b38ce \
             https://github.com/Leedarson-SmartLighting/matter-telink-light-zephyr \
             --token $MATTER_TOKEN"
 
@@ -82,10 +82,14 @@ jobs:
             telink tlsr9528a lighting-app-ota-4mb \
             out/telink-tlsr9528a-light-ota-4mb/zephyr/zephyr.elf \
             /tmp/bloat_reports/
-          cp out/telink-tlsr9528a-light-ota-4mb/zephyr/zephyr.bin \
-            /tmp/telink_build_artifacts/telinkLightAppFW_65521_36864_1.1.15.bin
           cp out/telink-tlsr9528a-light-ota-4mb/zephyr/zephyr.mcuboot.bin \
-            /tmp/telink_build_artifacts/telinkLightBtl_65521_36864_1.1.15.bin
+            /tmp/telink_build_artifacts/zephyr.mcuboot.bin
+          cp out/telink-tlsr9528a-light-ota-4mb/zephyr/zephyr.bin \
+            /tmp/telink_build_artifacts/telinkLightAppFW_${{ github.run_number }}_0x117C_0x9000_1.1.15.bin
+          cp out/telink-tlsr9528a-light-ota-4mb/zephyr/mcuboot_for_sign.bin \
+            /tmp/telink_build_artifacts/telinkLightBtl_${{ github.run_number }}_0x117C_0x9000_1.1.15.bin
+          cp examples/lighting-app/telink/telinkLightCfg_0x117C_0x9000_1.1.15.json \
+            /tmp/telink_build_artifacts/telinkLightCfg_${{ github.run_number }}_0x117C_0x9000_1.1.15.json
 
       - name: clean out build output
         run: rm -rf ./out
@@ -123,19 +127,21 @@ jobs:
         id: checksha256
         run: |
           cd /tmp/telink_build_artifacts
-          appfw_sha256=$(openssl sha256 -binary telinkLightAppFW_65521_36864_1.1.15.bin | base64)
-          btl_sha256=$(openssl sha256 -binary telinkLightBtl_65521_36864_1.1.15.bin | base64)
+          appfw_sha256=$(openssl sha256 -binary telinkLightAppFW_${{ github.run_number }}_0x117C_0x9000_1.1.15.bin | base64)
+          btl_sha256=$(openssl sha256 -binary telinkLightBtl_${{ github.run_number }}_0x117C_0x9000_1.1.15.bin | base64)
+          cfg_sha256=$(openssl sha256 -binary telinkLightCfg_${{ github.run_number }}_0x117C_0x9000_1.1.15.json | base64)
           echo "appfw_sha256=$appfw_sha256" >> $GITHUB_OUTPUT
           echo "btl_sha256=$btl_sha256" >> $GITHUB_OUTPUT
+          echo "cfg_sha256=$cfg_sha256" >> $GITHUB_OUTPUT
 
       - name: Upload ota file
         uses: inter-ikea/rs-hs-shipit-actions/upload-file@main
         id: otafile
         with:
-          file_path: "/tmp/telink_build_artifacts/telinkLightAppFW_65521_36864_1.1.15.bin"
+          file_path: "/tmp/telink_build_artifacts/telinkLightAppFW_${{ github.run_number }}_0x117C_0x9000_1.1.15.bin"
           api_key: ${{ secrets.SHIPIT_API_KEY }}
           api_url: ${{ vars.SHIPIT_URL }}
-          friendlyName: "telinkLightAppFW_65521_36864_1.1.15.bin"
+          friendlyName: "telinkLightAppFW_${{ github.run_number }}_0x117C_0x9000_1.1.15.bin"
           version: "1"
           versionType: "INTEGER"
           checksum: ${{ steps.checksha256.outputs.appfw_sha256 }}
@@ -146,22 +152,37 @@ jobs:
         uses: inter-ikea/rs-hs-shipit-actions/upload-file@main
         id: btlfile
         with:
-          file_path: "/tmp/telink_build_artifacts/telinkLightBtl_65521_36864_1.1.15.bin"
+          file_path: "/tmp/telink_build_artifacts/telinkLightBtl_${{ github.run_number }}_0x117C_0x9000_1.1.15.bin"
           api_key: ${{ secrets.SHIPIT_API_KEY }}
           api_url: ${{ vars.SHIPIT_URL }}
-          friendlyName: "telinkLightBtl_65521_36864_1.1.15.bin"
+          friendlyName: "telinkLightBtl_${{ github.run_number }}_0x117C_0x9000_1.1.15.bin"
           version: "1"
           versionType: "INTEGER"
           checksum: ${{ steps.checksha256.outputs.btl_sha256 }}
           checksumAlgorithm: "SHA256"
           labels: "btlfile" # important
 
+      - name: Upload config file
+        uses: inter-ikea/rs-hs-shipit-actions/upload-file@main
+        id: cfgfile
+        with:
+          file_path: "/tmp/telink_build_artifacts/telinkLightCfg_${{ github.run_number }}_0x117C_0x9000_1.1.15.json"
+          api_key: ${{ secrets.SHIPIT_API_KEY }}
+          api_url: ${{ vars.SHIPIT_URL }}
+          friendlyName: "telinkLightCfg_${{ github.run_number }}_0x117C_0x9000_1.1.15.json"
+          version: "1"
+          versionType: "INTEGER"
+          checksum: ${{ steps.checksha256.outputs.cfg_sha256 }}
+          checksumAlgorithm: "SHA256"
+          labels: "cfgfile" # important
+
       - name: Start Telink signing
-        uses: ./start-telink-silabs-signing
-        id: start-telink-silabs-signing
+        uses: ./start-matter-telink-signing
+        id: start-matter-telink-signing
         with:
           api_key: ${{ secrets.SHIPIT_API_KEY }}
           api_url: ${{ vars.SHIPIT_URL }}
           ota_file: ${{ steps.otafile.outputs.id }}
           btl_file: ${{ steps.btlfile.outputs.id }}
+          cfg_file: ${{ steps.cfgfile.outputs.id }}
           key_variant: "PROD"
