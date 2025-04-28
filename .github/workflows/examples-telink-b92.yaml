@@ -176,13 +176,13 @@ jobs:
           checksumAlgorithm: "SHA256"
           labels: "cfgfile" # important
 
-      - name: Start Telink signing
-        uses: inter-ikea/rs-hs-shipit-actions/start-matter-telink-signing@main
-        id: start-matter-telink-signing
-        with:
-          api_key: ${{ secrets.SHIPIT_API_KEY }}
-          api_url: ${{ vars.SHIPIT_URL }}
-          ota_file: ${{ steps.otafile.outputs.id }}
-          btl_file: ${{ steps.btlfile.outputs.id }}
-          cfg_file: ${{ steps.cfgfile.outputs.id }}
-          key_variant: "PROD"
+#      - name: Start Telink signing
+#        uses: inter-ikea/rs-hs-shipit-actions/start-matter-telink-signing@main
+#        id: start-matter-telink-signing
+#        with:
+#          api_key: ${{ secrets.SHIPIT_API_KEY }}
+#          api_url: ${{ vars.SHIPIT_URL }}
+#          ota_file: ${{ steps.otafile.outputs.id }}
+#          btl_file: ${{ steps.btlfile.outputs.id }}
+#          cfg_file: ${{ steps.cfgfile.outputs.id }}
+#          key_variant: "PROD"

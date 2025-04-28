@@ -9,7 +9,7 @@
     "productId": "0x9000",
     "versionNumber": "0x01010015",
     "versionString": "1.1.15",
-    "minVersion": "0x01010012",
+    "minVersion": "0x01010011",
     "maxVersion": "0x01010014"
   }
 }

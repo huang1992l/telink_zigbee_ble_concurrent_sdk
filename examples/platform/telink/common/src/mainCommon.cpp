@@ -67,7 +67,7 @@
 
 #include <stdio.h>
 
-volatile unsigned char githubnumber = 28;
+volatile unsigned char githubnumber = 29;
 
 LOG_MODULE_REGISTER(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
