@@ -238,16 +238,14 @@ public:
                 if (SupportsColorMode(endpoint, ColorControl::EnhancedColorMode::kCurrentXAndCurrentY))
                 {
                     VerifyOrReturnError(decodePair.valueUnsigned16.HasValue(), CHIP_ERROR_INVALID_ARGUMENT);
-                    colorXTransitionState->finalValue =
-                        std::min(decodePair.valueUnsigned16.Value(), colorXTransitionState->highLimit);
+                    colorXTransitionState->finalValue = decodePair.valueUnsigned16.Value();
                 }
                 break;
             case Attributes::CurrentY::Id:
                 if (SupportsColorMode(endpoint, ColorControl::EnhancedColorMode::kCurrentXAndCurrentY))
                 {
                     VerifyOrReturnError(decodePair.valueUnsigned16.HasValue(), CHIP_ERROR_INVALID_ARGUMENT);
-                    colorYTransitionState->finalValue =
-                        std::min(decodePair.valueUnsigned16.Value(), colorYTransitionState->highLimit);
+                    colorYTransitionState->finalValue = decodePair.valueUnsigned16.Value();
                 }
                 break;
             case Attributes::EnhancedCurrentHue::Id:
@@ -261,8 +259,7 @@ public:
                 if (SupportsColorMode(endpoint, ColorControl::EnhancedColorMode::kCurrentHueAndCurrentSaturation))
                 {
                     VerifyOrReturnError(decodePair.valueUnsigned8.HasValue(), CHIP_ERROR_INVALID_ARGUMENT);
-                    colorSaturationTransitionState->finalValue = std::min(static_cast<uint16_t>(decodePair.valueUnsigned8.Value()),
-                                                                          colorSaturationTransitionState->highLimit);
+                    colorSaturationTransitionState->finalValue = decodePair.valueUnsigned8.Value();
                 }
                 break;
             case Attributes::ColorLoopActive::Id:
@@ -281,8 +278,7 @@ public:
                 if (SupportsColorMode(endpoint, ColorControl::EnhancedColorMode::kColorTemperature))
                 {
                     VerifyOrReturnError(decodePair.valueUnsigned16.HasValue(), CHIP_ERROR_INVALID_ARGUMENT);
-                    colorTempTransitionState->finalValue =
-                        std::min(decodePair.valueUnsigned16.Value(), colorTempTransitionState->highLimit);
+                    colorTempTransitionState->finalValue = decodePair.valueUnsigned16.Value();
                 }
                 break;
             case Attributes::EnhancedColorMode::Id:
@@ -624,10 +620,10 @@ void ColorControlServer::handleModeSwitch(EndpointId endpoint, uint8_t newColorM
     switch (colorModeTransition)
     {
     case ColorControlServer::Conversion::HSV_TO_CIE_XY:
-        computePwmFromXy(endpoint);
+        // computePwmFromXy(endpoint);
         break;
     case ColorControlServer::Conversion::TEMPERATURE_TO_CIE_XY:
-        computePwmFromXy(endpoint);
+        // computePwmFromXy(endpoint);
         break;
     case ColorControlServer::Conversion::CIE_XY_TO_HSV:
         computePwmFromHsv(endpoint);
@@ -738,7 +734,15 @@ void ColorControlServer::computePwmFromHsv(EndpointId endpoint) {}
  *
  * @param endpoint The identifying endpoint Ver.: always
  */
-void ColorControlServer::computePwmFromXy(EndpointId endpoint) {}
+#include "lds_light_control.h"
+void ColorControlServer::computePwmFromXy(EndpointId endpoint) 
+{
+#ifdef EXTENDEDCOLOR_LIGHT
+    Color16uTransitionState * colorXTransitionState = getXTransitionState(endpoint);
+    Color16uTransitionState * colorYTransitionState = getYTransitionState(endpoint);
+    ldsColorAttrXyCtrl(colorXTransitionState->finalValue, colorYTransitionState->finalValue, colorXTransitionState->stepsTotal, colorXTransitionState->stepsRemaining);
+#endif
+}
 
 /**
  * @brief Computes new color value based on current position

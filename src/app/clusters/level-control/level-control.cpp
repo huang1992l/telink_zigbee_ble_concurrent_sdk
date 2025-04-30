@@ -457,7 +457,8 @@ void emberAfLevelControlClusterServerTickCallback(EndpointId endpoint)
         assert(currentLevel.Value() < state->maxLevel);
         assert(currentLevel.Value() < state->moveToLevel);
 
-        if ((state->commandId == Commands::MoveToLevel::Id) || (state->commandId == Commands::Step::Id))
+        if ((state->commandId == Commands::MoveToLevel::Id) || (state->commandId == Commands::MoveToLevelWithOnOff::Id) ||
+            (state->commandId == Commands::Step::Id) || (state->commandId == Commands::StepWithOnOff::Id))
         {
             uint16_t targetLevel = static_cast<uint16_t>(currentLevel.Value() + state->stepSize);
             targetLevel = (targetLevel > state->moveToLevel) ? state->moveToLevel : targetLevel;
@@ -473,7 +474,8 @@ void emberAfLevelControlClusterServerTickCallback(EndpointId endpoint)
         assert(state->minLevel < currentLevel.Value());
         assert(state->moveToLevel < currentLevel.Value());
 
-        if ((state->commandId == Commands::MoveToLevel::Id) || (state->commandId == Commands::Step::Id))
+        if ((state->commandId == Commands::MoveToLevel::Id) || (state->commandId == Commands::MoveToLevelWithOnOff::Id) ||
+            (state->commandId == Commands::Step::Id) || (state->commandId == Commands::StepWithOnOff::Id))
         {
             int16_t targetLevel = static_cast<int16_t>(currentLevel.Value() - state->stepSize);
             targetLevel = (targetLevel < static_cast<int16_t>(state->moveToLevel)) ? static_cast<int16_t>(state->moveToLevel) : targetLevel;
@@ -1027,10 +1029,17 @@ static Status moveToLevelHandler(EndpointId endpoint, CommandId commandId, uint8
     state->storedLevel              = storedLevel;
     state->callbackSchedule.runTime = System::Clock::Milliseconds32(0);
 
-    if (commandId == Commands::MoveToLevel::Id)
+    if (state->eventDurationMs >= 100)
     {
-        state->stepSize = static_cast<uint8_t>(ceil(static_cast<float>(actualStepSize) / static_cast<float>(std::max(static_cast<uint32_t>(1u), (state->transitionTimeMs / 100)))));
-        state->eventDurationMs = 100;
+        state->stepSize = 1;
+    }
+    else
+    {
+        if ((commandId == Commands::MoveToLevel::Id) || (commandId == Commands::MoveToLevelWithOnOff::Id))
+        {
+            state->stepSize = static_cast<uint8_t>(ceil(static_cast<float>(actualStepSize) / static_cast<float>(std::max(static_cast<uint32_t>(1u), (state->transitionTimeMs / 100)))));
+            state->eventDurationMs = 100;
+        }
     }
 
 #ifdef MATTER_DM_PLUGIN_SCENES_MANAGEMENT
@@ -1334,12 +1343,18 @@ static void stepHandler(CommandHandler * commandObj, const ConcreteCommandPath &
     state->eventDurationMs = state->transitionTimeMs / std::max(static_cast<uint8_t>(1u), actualStepSize);
     state->elapsedTimeMs   = 0;
 
-    if (commandId == Commands::Step::Id)
+    if (state->eventDurationMs >= 100)
     {
-        state->stepSize = static_cast<uint8_t>(ceil(static_cast<float>(actualStepSize) / static_cast<float>(std::max(static_cast<uint32_t>(1u), (state->transitionTimeMs / 100)))));
-        state->eventDurationMs = 100;
+        state->stepSize = 1;
     }
-
+    else
+    {
+        if ((commandId == Commands::Step::Id) || (commandId == Commands::StepWithOnOff::Id))
+        {
+            state->stepSize = static_cast<uint8_t>(ceil(static_cast<float>(actualStepSize) / static_cast<float>(std::max(static_cast<uint32_t>(1u), (state->transitionTimeMs / 100)))));
+            state->eventDurationMs = 100;
+        }
+    }
     // storedLevel is not used for Step commands
     state->storedLevel              = INVALID_STORED_LEVEL;
     state->callbackSchedule.runTime = System::Clock::Milliseconds32(0);

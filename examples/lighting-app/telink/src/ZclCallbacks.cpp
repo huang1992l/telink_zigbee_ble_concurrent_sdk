@@ -25,7 +25,7 @@
 #include <app-common/zap-generated/ids/Clusters.h>
 #include <app/ConcreteAttributePath.h>
 #include <lib/support/logging/CHIPLogging.h>
-
+#include <app/clusters/color-control-server/color-control-server.h>
 #include "lds_light_control.h"
 #include "lds_color_utility.h"
 
@@ -658,28 +658,141 @@ void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & 
 void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & attributePath, uint8_t type, uint16_t size,
                                        uint8_t * value)
 {
-    if(!GetAppTask().IsLightControlInitCompleted())
-    {
-        LDS_LOG_E("GetAppTask().IsLightControlInitCompleted() is false");
-        return;
-    }
     /* user mode , add the customer code here for cb*/
     ClusterId clusterId     = attributePath.mClusterId;
     AttributeId attributeId = attributePath.mAttributeId;
-    Protocols::InteractionModel::Status status;
     LDS_LOG_I("============MatterPostAttributeChangeCallback:clusterId:0x%x,attributeId:0x%x value:0x%x================",clusterId,attributeId,*value);
     if (clusterId == OnOff::Id )
-    {
+    {         
         onoff_attribute_change_handle(attributeId,0xFF,0xFFFF,value);
     }else if (clusterId == LevelControl::Id)
     {
         level_attribute_change_handle(attributeId,0xFF,0xFFFF,value);
     }else if(clusterId == ColorControl::Id) {
-        color_attribute_change_handle(attributeId,0xFF,0xFFFF,value);
+        // color_attribute_change_handle(attributeId,0xFF,0xFFFF,value);
+
+        uint8_t colorMode = 0x02;
+        ColorControl::Attributes::ColorMode::Get(1, &colorMode);
+
+#ifdef EXTENDEDCOLOR_LIGHT
+        uint8_t syncHue = 0;
+        uint8_t syncSaturation = 0;
+#endif
+
+        uint16_t syncX = 0;
+        uint16_t syncY = 0;
+        uint16_t syncColorTemp = 0;
+
+        chip::app::MarkAttributeDirty markXDirty = chip::app::MarkAttributeDirty::kNo; 
+
+        switch(attributeId)
+        {
+            case ColorControl::Attributes::CurrentX::Id:
+            case ColorControl::Attributes::CurrentY::Id:
+                if(colorMode == ColorControlServer::EnhancedColorMode::kCurrentXAndCurrentY) 
+                {       
+#ifdef COLORTEMPERATURE_LIGHT
+                    ColorControl::Attributes::CurrentX::Get(1, &syncX);
+                    ColorControl::Attributes::CurrentY::Get(1, &syncY);
+
+                    ldsColorConversionColorTempLight(0x01, &syncX, &syncY, &syncColorTemp);
+
+                    ColorControl::Attributes::ColorTemperatureMireds::Set(1, syncColorTemp, markXDirty);
+
+                    lds_light_control_state_t *state = lds_light_control_state_get();
+
+                    if ((state->currentX != syncX) || (state->currentY != syncY))
+                    {
+                        state->currentX              = syncX;
+                        state->currentY              = syncY;
+                        state->currentColorTempMired = syncColorTemp;
+                        state->transitionTime        = 100;
+
+                        ldsBulbDriverMinitrimCtrlMoveTo(state);
+                    }
+#endif
+                }
+                break;
+#ifdef EXTENDEDCOLOR_LIGHT
+            case ColorControl::Attributes::CurrentHue::Id:
+            case ColorControl::Attributes::CurrentSaturation::Id:
+                if(colorMode == ColorControlServer::EnhancedColorMode::kCurrentHueAndCurrentSaturation) 
+                {
+                    ColorControl::Attributes::CurrentHue::Get(1, &syncHue);
+                    ColorControl::Attributes::CurrentSaturation::Get(1, &syncSaturation);
+                    ldsColorConversion(0x00, &syncHue, &syncSaturation, &syncX, &syncY, &syncColorTemp);
+                    ColorControl::Attributes::ColorTemperatureMireds::Set(1, syncColorTemp, markXDirty);
+                    ColorControl::Attributes::CurrentX::Set(1, syncX, markXDirty);
+                    ColorControl::Attributes::CurrentY::Set(1, syncY, markXDirty);
+                    lds_light_control_set_currentX(syncX);
+                    lds_light_control_set_currentY(syncY);
+                    lds_light_control_set_currentColorTempMired(syncColorTemp);
+
+                    lds_light_control_set_transitionTime(100);
+                    color_attribute_change_handle(attributeId, type, size, value);
+                }
+                break;
+#endif
+            case ColorControl::Attributes::ColorTemperatureMireds::Id:
+                if(colorMode == ColorControlServer::EnhancedColorMode::kColorTemperature) 
+                {      
+                    ColorControl::Attributes::ColorTemperatureMireds::Get(1, &syncColorTemp);
+
+#ifdef COLORTEMPERATURE_LIGHT
+                    ldsColorConversionColorTempLight(0x02, &syncX, &syncY, &syncColorTemp);
+                    ColorControl::Attributes::CurrentX::Set(1, syncX, markXDirty);
+                    ColorControl::Attributes::CurrentY::Set(1, syncY, markXDirty);
+
+                    lds_light_control_set_currentX(syncX);
+                    lds_light_control_set_currentY(syncY);
+#endif
+
+#ifdef EXTENDEDCOLOR_LIGHT
+                    ldsColorConversion(0x02, &syncHue, &syncSaturation, &syncX, &syncY, &syncColorTemp);
+                    ColorControl::Attributes::CurrentHue::Set(1, syncHue, markXDirty);
+                    ColorControl::Attributes::CurrentSaturation::Set(1, syncSaturation, markXDirty);
+                    ColorControl::Attributes::CurrentX::Set(1, syncX, markXDirty);
+                    ColorControl::Attributes::CurrentY::Set(1, syncY, markXDirty);
+
+                    lds_light_control_set_currentX(syncX);
+                    lds_light_control_set_currentY(syncY);
+                    lds_light_control_set_currentHue(syncHue);
+                    lds_light_control_set_currentSaturation(syncSaturation);
+#endif
+                    lds_light_control_set_transitionTime(100);
+                    color_attribute_change_handle(attributeId, type, size, value);
+                }
+                break;
+    
+            case ColorControl::Attributes::ColorMode::Id:
+                color_attribute_change_handle(attributeId,0xFF,0xFFFF,value);
+                break;
+        }
     } 
     
    return ;
 }
+
+#ifdef EXTENDEDCOLOR_LIGHT
+extern "C"  void ldsMatterAttrXyConversionReport(uint16_t currentX, uint16_t currentY)
+{
+    uint8_t syncHue = 0;
+    uint8_t syncSaturation = 0;
+    uint16_t syncColorTemp = 0;
+    chip::app::MarkAttributeDirty markXDirty = chip::app::MarkAttributeDirty::kNo;
+
+    ldsColorConversion(0x01, &syncHue, &syncSaturation, &currentX, &currentY, &syncColorTemp);
+    ColorControl::Attributes::ColorTemperatureMireds::Set(1, syncColorTemp, markXDirty);
+    ColorControl::Attributes::CurrentHue::Set(1, syncHue, markXDirty);
+    ColorControl::Attributes::CurrentSaturation::Set(1, syncSaturation, markXDirty);
+    ColorControl::Attributes::CurrentX::Set(1, currentX, markXDirty);
+    ColorControl::Attributes::CurrentY::Set(1, currentY, markXDirty);
+
+    lds_light_control_set_currentHue(syncHue);
+    lds_light_control_set_currentSaturation(syncSaturation);
+    lds_light_control_set_currentColorTempMired(syncColorTemp);
+}
+#endif
 #endif
 
 

@@ -2,7 +2,7 @@
  * @Author: chenxiaoqian chenxiaoqian@leedarson.com
  * @Date: 2024-08-06 20:20:39
  * @LastEditors: huangshiting alyssahuang@leedarson.com
- * @LastEditTime: 2025-01-16 10:15:59
+ * @LastEditTime: 2025-02-15 18:14:42
  * @FilePath: /chenxiaoqian/connectedhomeip/examples/lighting-app/telink/include/lds_mfg_token_config.h
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -15,6 +15,7 @@ extern "C" {
 #include <stdint.h>
 #include "lds_mfg_token_info_config.h"
 #include "lds_error_codes.h"
+#include "lds_system_common.h"
 
 #if defined(EXTENDEDCOLOR_LIGHT)
 #include "lds_color_algorithm.h"
@@ -22,9 +23,11 @@ extern "C" {
 
 
 void ldsGetTokenInfoFromFlash(void);
+uint8_t ldsMfgTokenGetMatterFirmwareType(void);
 lds_status_t ldsGetMfgTokenDriverI2cType(uint8_t * i2c_type );
 lds_status_t ldsMfgTokenDriverI2cType(uint8_t * i2c_type);
 lds_status_t ldsGetMfgTokenDriverMode(uint8_t * driver_mode);  //PWM or I2C mode
+lds_model_id_t *ldsMfgTokenGetModelID(void);
 void ldsGetTokenInfoFromGlobalVariate(lds_token_info_t * token_info_pointer);
 //lds_status_t ldsGetMfgTokenI2cGrayScale(uint8_t * i2c_gray_scale);
 uint8_t ldsMfgTokenDriverOverTemperature(void);
@@ -44,6 +47,7 @@ uint16_t ldsTokenMediumOutputLimit(void);
 #endif
 
 uint16_t ldsTokenPrechargeDutyCycle(void);
+bool ldsTokenPerchargeFlagGet(void);
 uint16_t ldsTokenPrechargeDutyCycleOutputTime(void);
 uint8_t ldsTokenPrechargeDutyCycleCondition(void);
 uint32_t ldsTokenPrechargeOnOffIntervalTimeMs(void);

@@ -47,6 +47,7 @@
 #include <zephyr/drivers/flash.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/reboot.h>
+#include <app/clusters/color-control-server/color-control-server.h>
 
 #include "lds_light_control.h"
 #include "lds_log.h"
@@ -430,6 +431,209 @@ static void init_startup_para(void)
 #endif
 #endif
 
+#if 1
+static const char onoff_key[]                = "g/a/1/6/0";
+static const char startUpOnOff_key[]         = "g/a/1/6/4003";
+static const char currentLevel_key[]         = "g/a/1/8/0";
+static const char minLevel_key[]             = "g/a/1/8/2";
+static const char maxLevel_key[]             = "g/a/1/8/3";
+static const char startUpCurrentLevel_key[]  = "g/a/1/8/4000";
+
+#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
+static const char x_key[]                    = "g/a/1/300/3";
+static const char y_key[]                    = "g/a/1/300/4";
+static const char colorTemp_key[]            = "g/a/1/300/7";
+static const char colorMode_key[]            = "g/a/1/300/8";
+static const char colorTempPhysicalMin_key[] = "g/a/1/300/400b";
+static const char colorTempPhysicalMax_key[] = "g/a/1/300/400c";
+static const char startUpColorTemp_key[]     = "g/a/1/300/4010";
+#endif
+
+#ifdef EXTENDEDCOLOR_LIGHT
+static const char hue_key[]                  = "g/a/1/300/0";
+static const char saturation_key[]           = "g/a/1/300/1";
+#endif
+
+bool ldsCheckLightOnOff()
+{
+    bool onoff = true;
+    uint8_t startUpOnOff = 0x01;
+    CHIP_ERROR onOffErr        = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(onoff_key, &onoff);
+    CHIP_ERROR startUpOnOffErr = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(startUpOnOff_key, &startUpOnOff);
+
+    if (!GetAppTask().OtaGetAnaFlagPublic())
+    {
+        // if(startUpOnOffErr == CHIP_NO_ERROR)
+        {
+            if (startUpOnOff == 0x00 && onoff == true) 
+            {
+                // Set the current OnOff attribute to 0 (off)
+                onoff = false;
+            } 
+            else if (startUpOnOff == 0x01 && onoff == false) 
+            {
+                // Set the current OnOff attribute to 1 (on)
+                onoff = true;
+            } 
+            else if (startUpOnOff == 0x02) 
+            {
+                // Toggle current OnOff attribute
+                onoff = !onoff;
+            }
+        }
+    }
+
+    return onoff;
+}
+
+uint8_t ldsCheckLightCurrentLevel()
+{
+    uint8_t currentLevel = 0xFE;
+    uint8_t startUpCurrentLevel = 0xFF;
+    uint8_t minLevel = 0x01;
+    uint8_t maxLevel = 0xFE;
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(minLevel_key, &minLevel);
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(maxLevel_key, &maxLevel);
+    CHIP_ERROR currentLevelErr        = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(currentLevel_key, &currentLevel);
+    CHIP_ERROR startUpCurrentLevelErr = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(startUpCurrentLevel_key, &startUpCurrentLevel);
+
+    if(startUpCurrentLevelErr == CHIP_NO_ERROR)
+    {
+        if (startUpCurrentLevel == 0x0)
+        {
+            // Set the CurrentLevel attribute to the minimum value
+            currentLevel = minLevel;
+        } 
+        else if(startUpCurrentLevel !=  0xFF)
+        {
+            if(startUpCurrentLevel < minLevel)
+            {
+                currentLevel = minLevel;
+            }
+            else if(startUpCurrentLevel > maxLevel)
+            {
+                currentLevel = maxLevel;
+            }
+            else
+            {
+                currentLevel = startUpCurrentLevel;
+            }
+        }
+    }
+
+    return currentLevel;
+}
+
+#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
+bool ldsCheckLightColorTemp(uint8_t *colorMode, uint16_t *colorTempMired)
+{
+    uint16_t colorTempMiredMin = 0x0099;
+
+#if defined(COLORTEMPERATURE_LIGHT)
+    uint16_t colorTempMiredMax = 0x01C6;
+#elif defined(EXTENDEDCOLOR_LIGHT)
+    uint16_t colorTempMiredMax = 0x022B;
+#endif
+
+    uint16_t startUpColorTempMired = 0xFFFF;
+
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(colorTempPhysicalMin_key, &colorTempMiredMin);
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(colorTempPhysicalMax_key, &colorTempMiredMax);
+    CHIP_ERROR err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(startUpColorTemp_key, &startUpColorTempMired);
+
+    if(err == CHIP_NO_ERROR)
+    {
+        if (startUpColorTempMired >= colorTempMiredMin && startUpColorTempMired <= colorTempMiredMax)
+        {
+            // Update Current color temp value to StartUpColor temp value
+            *colorTempMired = startUpColorTempMired;
+            *colorMode = 0x02;
+            return true;
+        }
+    }
+
+    return false;
+}
+#endif
+
+void ldsLightInit()
+{
+    bool     target_onoff   = 0x01;
+    uint8_t  target_level   = 0xFE;
+
+#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
+    uint16_t xValue         = 0x75BA;
+    uint16_t yValue         = 0x691D;
+    uint8_t  colorMode      = 0x02;
+    uint16_t colorTempMired = 0x0172;
+#endif
+
+#ifdef EXTENDEDCOLOR_LIGHT
+    uint8_t  currentHue     = 0x18;
+    uint8_t  saturation     = 0xC9;
+#endif
+
+    target_onoff = ldsCheckLightOnOff();
+    target_level = ldsCheckLightCurrentLevel();
+
+#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
+    if (!ldsCheckLightColorTemp(&colorMode, &colorTempMired))
+    {
+        chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(colorMode_key, &colorMode);
+        switch (colorMode)
+        {   
+#ifdef EXTENDEDCOLOR_LIGHT
+            case ColorControlServer::EnhancedColorMode::kCurrentHueAndCurrentSaturation:
+            {     
+                chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(hue_key, &currentHue);
+                chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(saturation_key, &saturation);
+                break;
+            }
+#endif
+            case ColorControlServer::EnhancedColorMode::kCurrentXAndCurrentY:
+            {           
+                chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(x_key, &xValue);
+                chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(y_key, &yValue);
+                break;
+            }
+            case ColorControlServer::EnhancedColorMode::kColorTemperature:
+            {
+                chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(colorTemp_key, &colorTempMired);
+                break;
+            }
+        }
+    }
+#endif
+
+    lds_light_control_state_t light_state = {0};
+
+    light_state.currentOnOff = target_onoff;
+    light_state.currentLevel = target_level;
+
+#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
+    light_state.currentColorMode = colorMode;
+
+#ifdef COLORTEMPERATURE_LIGHT
+    ldsColorConversionColorTempLight(colorMode, &xValue, &yValue, &colorTempMired);
+#endif
+
+#ifdef EXTENDEDCOLOR_LIGHT
+    ldsColorConversion(colorMode, &currentHue, &saturation, &xValue, &yValue, &colorTempMired);
+    light_state.currentHue = currentHue;
+    light_state.currentSaturation = saturation;
+#endif
+
+    light_state.currentX = xValue;
+    light_state.currentY = yValue;
+    light_state.currentColorTempMired = colorTempMired;
+#endif
+
+    light_state.transitionTime = 100;
+
+    init_to_startup_matter(light_state);
+}
+#endif
+
 int main(void)
 {
 #if defined(CONFIG_USB_DEVICE_STACK) && !defined(CONFIG_CHIP_PW_RPC)
@@ -463,22 +667,18 @@ int main(void)
     ldsLightEffectInit();
     ldsDriverAdcInit();
     ldsDeivceNtcInit();
-#if APP_LIGHT_USER_MODE_EN
-#if CONFIG_STARTUP_OPTIMIZATE
+
     unsigned char val;
     flash_read(flash_para_dev, USER_PARTITION_OFFSET, &val, 1);
 
     if (val == USER_MATTER_PAIR_VAL)
     {
-        init_cluster_partition();
-        init_startup_para();
+        ldsLightInit();
     }else if (val == USER_INIT_VAL)
     {
         init_to_startup(kExampleEndpointId,true);
     }
-#endif
-#endif
-
+    
     printf("GitHub Number: %d\n", githubnumber);
 
     err = chip::Platform::MemoryInit();

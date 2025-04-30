@@ -553,6 +553,7 @@ void AppTaskCommon::IdentifyStopHandler(Identify *)
     event.Handler = [](AppEvent * event) {
         ChipLogProgress(Zcl, "OnIdentifyStop");
         // PwmManager::getInstance().setPwm(PwmManager::EAppPwm_Indication, false);
+        ldsLightEffectIdentifyStop();
     };
     GetAppTask().PostEvent(&event);
 }
@@ -972,6 +973,7 @@ int KOtaQueryImageTimer_proc(void)
     return 1;
 }
 
+#if CONFIG_STARTUP_OPTIMIZATE
 void AppTaskCommon::Get_Startup_Cluster_Info(void)
 {
     cluster_startup_para * p_para = &g_light_cluster_para;
@@ -1142,6 +1144,8 @@ void AppTaskCommon::Get_Startup_Cluster_Info(void)
         LDS_LOG_E("[ChipEventHandler] Fail store startup cluster para\n");
     }
 }
+#endif
+
 void AppTaskCommon::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */)
 {
     switch (event->Type)

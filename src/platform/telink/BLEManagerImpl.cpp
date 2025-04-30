@@ -254,7 +254,7 @@ struct BLEManagerImpl::ServiceData
 inline CHIP_ERROR BLEManagerImpl::PrepareAdvertisingRequest(void)
 {
     static ServiceData serviceData;
-    static std::array<bt_data, 2> advertisingData;
+    static std::array<bt_data, 3> advertisingData;
     static std::array<bt_data, 1> scanResponseData;
     static_assert(sizeof(serviceData) == 10, "Unexpected size of BLE advertising data!");
 
@@ -266,6 +266,7 @@ inline CHIP_ERROR BLEManagerImpl::PrepareAdvertisingRequest(void)
 
     advertisingData[0]  = BT_DATA(BT_DATA_FLAGS, &kAdvertisingFlags, sizeof(kAdvertisingFlags));
     advertisingData[1]  = BT_DATA(BT_DATA_SVC_DATA16, &serviceData, sizeof(serviceData));
+    advertisingData[2]  = BT_DATA(BT_DATA_UUID16_ALL, &UUID16_CHIPoBLEService.val, sizeof(UUID16_CHIPoBLEService.val));
     scanResponseData[0] = BT_DATA(BT_DATA_NAME_COMPLETE, name, nameSize);
 
     mAdvertisingRequest.priority         = CHIP_DEVICE_BLE_ADVERTISING_PRIORITY;
@@ -906,13 +907,33 @@ CHIP_ERROR BLEManagerImpl::HandleOperationalNetworkEnabled(const ChipDeviceEvent
 {
     ChipLogDetail(DeviceLayer, "HandleOperationalNetworkEnabled");
 
-    int error = bt_conn_disconnect(BLEMgrImpl().mconId, BT_HCI_ERR_LOCALHOST_TERM_CONN);
-    if (error)
+    CHIP_ERROR error = CHIP_NO_ERROR;
+    if (!mThreadConnectCntr)
     {
-        ChipLogError(DeviceLayer, "Close BLEConn err: %d", error);
+        error = MapErrorZephyr(bt_conn_disconnect(BLEMgrImpl().mconId, BT_HCI_ERR_LOCALHOST_TERM_CONN));
+        if (error != CHIP_NO_ERROR)
+        {
+            ChipLogError(DeviceLayer, "Close BLEConn err: %" CHIP_ERROR_FORMAT, error.Format());
+        }
     }
+    else
+    {
+        ThreadStackMgrImpl().SetThreadEnabled(false);
+        SwitchToIeee802154();
 
-    return MapErrorZephyr(error);
+        ChipDeviceEvent attachEvent;
+        attachEvent.Type                            = DeviceEventType::kThreadConnectivityChange;
+        attachEvent.ThreadConnectivityChange.Result = kConnectivity_Established;
+
+        error = PlatformMgr().PostEvent(&attachEvent);
+        VerifyOrExit(error == CHIP_NO_ERROR, ChipLogError(DeviceLayer, "PostEvent err: %" CHIP_ERROR_FORMAT, error.Format()));
+
+        ThreadStackMgrImpl().CommitConfiguration();
+    }
+    mThreadConnectCntr++;
+
+exit:
+    return error;
 }
 
 CHIP_ERROR BLEManagerImpl::HandleThreadStateChange(const ChipDeviceEvent * event)

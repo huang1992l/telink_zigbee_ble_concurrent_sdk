@@ -233,3 +233,7 @@ config SECURE_PROGRAMMING
 config STARTUP_OPTIMIZATE
 	bool "Enable startup speed optimization"
     default n
+
+config DEFERRED_ATTR_STORAGE
+	bool "Control deferred attribute storage time"
+	default n

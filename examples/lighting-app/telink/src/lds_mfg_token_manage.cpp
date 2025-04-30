@@ -2,7 +2,7 @@
  * @Author: chenxiaoqian chenxiaoqian@leedarson.com
  * @Date: 2024-08-07 17:09:44
  * @LastEditors: huangshiting alyssahuang@leedarson.com
- * @LastEditTime: 2025-01-16 10:18:00
+ * @LastEditTime: 2025-04-18 15:12:05
  * @FilePath: /chenxiaoqian/connectedhomeip/examples/lighting-app/telink/src/lds_mfg_token_manage.cpp
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -15,6 +15,8 @@
 #include <zephyr/drivers/flash.h>
 #include <zephyr/storage/flash_map.h>
 
+#include "AppConfig.h"
+
 #include <cstring>
 
 #ifdef __cplusplus
@@ -22,6 +24,7 @@ extern "C" {
 #endif
 
 lds_token_info_t token_information_set = {0};
+static lds_model_id_t lds_model_id;
 
 const struct device * flash_token_dev = TOKEN_PARTITION_DEVICE;
 
@@ -31,13 +34,20 @@ void ldsGetTokenInfoFromFlash(void){
     flash_read(flash_token_dev, TOKEN_PARTITION_OFFSET + OFFSET_START_ADDRESS, token_info, sizeof(token_information_set));
     LDS_LOG_I("\n\n\n sizeof of token_information_set 0x%x \n",sizeof(token_information_set));
     LDS_LOG_I("\n\n\n token_info->off_transition_time_ds 0x%x \n",token_info->off_transition_time_ds);
-}
+    }
 
 void ldsGetTokenInfoFromGlobalVariate(lds_token_info_t * token_info_pointer){
     if(token_info_pointer == NULL){
         LDS_LOG_I("i2c_type pointer is NULL \n");
     } 
      memcpy(token_info_pointer, &token_information_set, sizeof(token_information_set));
+}
+
+uint8_t ldsMfgTokenGetMatterFirmwareType(void)
+{
+    uint8_t firmwareType = (token_information_set.key_type == 0x01) ? FW_TYPE_PRODUCT : FW_TYPE_DEVELOP;
+
+    return firmwareType;
 }
 
 lds_status_t ldsGetMfgTokenDriverI2cType(uint8_t * i2c_type ){
@@ -69,6 +79,25 @@ lds_status_t ldsGetMfgTokenDriverMode(uint8_t * driver_mode){
         return LDS_ERROR_INVALID_PARAMETER;
     }
     return LDS_SUCCESS;
+}
+
+lds_model_id_t *ldsMfgTokenGetModelID(void)
+{
+    lds_model_id.len = 0;
+
+    for (uint8_t i = 0; i < 33; i++)
+    {
+        if (token_information_set.model_identifier[i] == 0xFF)
+        {
+            lds_model_id.len = i;
+            break;
+        }
+    }
+
+    memcpy(lds_model_id.model_id, &token_information_set.model_identifier, lds_model_id.len);
+    lds_model_id.model_id[lds_model_id.len] = '\0';
+
+    return &lds_model_id;
 }
 
 uint8_t ldsMfgTokenDriverOverTemperature(void)
@@ -289,6 +318,17 @@ uint16_t ldsTokenPrechargeDutyCycle(void)
     return dutyCycle;
 }
 
+bool ldsTokenPerchargeFlagGet(void)
+{
+    if ((token_information_set.precharge_duty_cycle >= 0x80)
+     && (token_information_set.precharge_duty_cycle <= 0xFE))
+    {
+        return false;
+    }
+
+    return true;
+}
+
 uint16_t ldsTokenPrechargeDutyCycleOutputTime(void)
 {
     uint16_t time = (token_information_set.precharge_duty_cycle_time == 0xFF) ? 20 : (uint16_t)token_information_set.precharge_duty_cycle_time;
@@ -335,7 +375,7 @@ lds_status_t ldsGetMfgTokenCwsAlgorithmMode(uint8_t *mode)
         return LDS_ERROR_INVALID_PARAMETER;
     }
 
-    *mode = (token_information_set.cws_5_ways_algorithm_mode == 0xFF) ? 0 : token_information_set.cws_5_ways_algorithm_mode;
+    *mode = (token_information_set.cws_5_ways_algorithm_mode == 0xFF) ? 1 : token_information_set.cws_5_ways_algorithm_mode;
 
     return LDS_SUCCESS;
 }

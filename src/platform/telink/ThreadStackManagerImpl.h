@@ -62,6 +62,7 @@ public:
     void SetRadioBlocked(bool state) { mRadioBlocked = state; }
     bool IsReadyToAttach(void) const { return mReadyToAttach; }
     void Finalize(void);
+    CHIP_ERROR CommitConfiguration(void);
 
 protected:
     // ===== Methods that implement the ThreadStackManager abstract interface.
@@ -95,6 +96,7 @@ private:
     // ===== Private members for use by this class only.
     bool mRadioBlocked;
     bool mReadyToAttach;
+    uint8_t mAttachCntr = 0;
 
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD_SRP_CLIENT
     k_sem mSrpClearAllSemaphore;

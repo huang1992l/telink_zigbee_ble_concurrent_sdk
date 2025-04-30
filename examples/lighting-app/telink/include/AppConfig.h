@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include "lds_mfg_token_config.h"
+
 // ---- Lighting Example App Config ----
 
 #define APP_SET_DEVICE_INFO_PROVIDER 1
@@ -46,4 +48,4 @@
 #define FW_TYPE_DEBUG 1
 #define FW_TYPE_DEVELOP 2
 
-#define MATTER_FW_TYPE FW_TYPE_DEVELOP
+#define MATTER_FW_TYPE ldsMfgTokenGetMatterFirmwareType()
