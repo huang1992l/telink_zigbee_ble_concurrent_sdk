@@ -25,6 +25,8 @@
 #include <platform/PlatformManager.h>
 #include <tracing/macros.h>
 
+#include "lds_light_effect.h"
+
 #ifdef MATTER_DM_PLUGIN_SCENES_MANAGEMENT
 #include <app/clusters/scenes-server/scenes-server.h>
 #endif
@@ -474,6 +476,8 @@ bool ColorControlServer::HasFeature(chip::EndpointId endpoint, Feature feature)
 
 Status ColorControlServer::stopAllColorTransitions(EndpointId endpoint)
 {
+    ldsLightMultiEffectStop();
+
     EmberEventControl * event = getEventControl(endpoint);
     VerifyOrReturnError(event != nullptr, Status::UnsupportedEndpoint);
 

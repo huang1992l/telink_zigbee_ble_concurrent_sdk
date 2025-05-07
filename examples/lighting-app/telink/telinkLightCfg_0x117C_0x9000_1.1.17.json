@@ -7,9 +7,9 @@
   "productInfo": {
     "vendorId": "0x117C",
     "productId": "0x9000",
-    "versionNumber": "0x01010016",
-    "versionString": "1.1.16",
+    "versionNumber": "0x01010017",
+    "versionString": "1.1.17",
     "minVersion": "0x01010005",
-    "maxVersion": "0x01010015"
+    "maxVersion": "0x01010016"
   }
 }
