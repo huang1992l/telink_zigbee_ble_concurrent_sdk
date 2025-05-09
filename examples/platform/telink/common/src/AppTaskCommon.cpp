@@ -1198,7 +1198,9 @@ void AppTaskCommon::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* 
 #endif
 #endif
         printk("Commissioning complete, set Matter commissionined flag");
-        ldsLightEffectJionNetworkStart();
+
+        bool returnToPreviousState = (chip::Server::GetInstance().GetFabricTable().FabricCount() <= 1) ? false : true;
+        ldsLightEffectJionNetworkStart(returnToPreviousState);
    }
         break;
     case DeviceEventType::kFailSafeTimerExpired: {
