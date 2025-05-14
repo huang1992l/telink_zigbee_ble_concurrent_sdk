@@ -523,6 +523,8 @@ void emberAfLevelControlClusterServerTickCallback(EndpointId endpoint)
             {
                 updateCoupledColorTemp(endpoint);
             }
+
+            SetCurrentLevelQuietReport(endpoint, state, storedLevel8u, true);
         }
 
         state->callbackSchedule.runTime = System::Clock::Milliseconds32(0);
@@ -1375,6 +1377,9 @@ static void stopHandler(CommandHandler * commandObj, const ConcreteCommandPath &
     EmberAfLevelControlState * state = getState(endpoint);
     Status status                    = Status::Success;
 
+    DataModel::Nullable<uint8_t> currentLevel;
+    Attributes::CurrentLevel::Get(endpoint, currentLevel);
+
     if (state == nullptr)
     {
         status = Status::Failure;
@@ -1388,7 +1393,8 @@ static void stopHandler(CommandHandler * commandObj, const ConcreteCommandPath &
 
     // Cancel any currently active command.
     cancelEndpointTimerCallback(endpoint);
-    SetCurrentLevelQuietReport(endpoint, state, state->quietCurrentLevel.value(), true /*isStartOrEndOfTransition*/);
+    // SetCurrentLevelQuietReport(endpoint, state, state->quietCurrentLevel.value(), true /*isStartOrEndOfTransition*/);
+    SetCurrentLevelQuietReport(endpoint, state, currentLevel, true /*isStartOrEndOfTransition*/);
     writeRemainingTime(endpoint, 0);
 
 send_default_response:

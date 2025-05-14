@@ -29,7 +29,7 @@ concurrency:
 
 env:
   CHIP_NO_LOG_TIMESTAMPS: true
-  SOFTWARE_VERSION: 1.1.17
+  SOFTWARE_VERSION: 1.1.18
 
 jobs:
   build:
@@ -71,7 +71,7 @@ jobs:
           scripts/run_in_build_env.sh \
             "pip3 install requests &&  pip3 install pyyaml && python3 \
             scripts/tools/telink/update_zephyr.py \
-            37ac27091a39cd943720850db276035b5b64ae3e \
+            36fb6663eeea1d560aa617c841c4128d69bdddf1 \
             https://github.com/Leedarson-SmartLighting/matter-telink-light-zephyr \
             --token $MATTER_TOKEN"
 

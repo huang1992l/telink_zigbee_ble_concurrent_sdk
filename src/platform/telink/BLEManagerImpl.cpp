@@ -254,7 +254,7 @@ struct BLEManagerImpl::ServiceData
 inline CHIP_ERROR BLEManagerImpl::PrepareAdvertisingRequest(void)
 {
     static ServiceData serviceData;
-    static std::array<bt_data, 3> advertisingData;
+    static std::array<bt_data, 2> advertisingData;
     static std::array<bt_data, 1> scanResponseData;
     static_assert(sizeof(serviceData) == 10, "Unexpected size of BLE advertising data!");
 
@@ -266,7 +266,6 @@ inline CHIP_ERROR BLEManagerImpl::PrepareAdvertisingRequest(void)
 
     advertisingData[0]  = BT_DATA(BT_DATA_FLAGS, &kAdvertisingFlags, sizeof(kAdvertisingFlags));
     advertisingData[1]  = BT_DATA(BT_DATA_SVC_DATA16, &serviceData, sizeof(serviceData));
-    advertisingData[2]  = BT_DATA(BT_DATA_UUID16_ALL, &UUID16_CHIPoBLEService.val, sizeof(UUID16_CHIPoBLEService.val));
     scanResponseData[0] = BT_DATA(BT_DATA_NAME_COMPLETE, name, nameSize);
 
     mAdvertisingRequest.priority         = CHIP_DEVICE_BLE_ADVERTISING_PRIORITY;
