@@ -71,8 +71,8 @@ jobs:
           scripts/run_in_build_env.sh \
             "pip3 install requests &&  pip3 install pyyaml && python3 \
             scripts/tools/telink/update_zephyr.py \
-            36fb6663eeea1d560aa617c841c4128d69bdddf1 \
-            https://github.com/Leedarson-SmartLighting/matter-telink-light-zephyr \
+            3e3ef8429afc2eb5c7a47c262fee2023078dee74 \
+            https://github.com/Leedarson-SmartLighting/matter-telink-luminaire-zephyr \
             --token $MATTER_TOKEN"
 
       - name: Build example Telink (B92) Lighting App with OTA and 4Mb flash
