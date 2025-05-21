@@ -17,7 +17,7 @@ name: Build example - Telink
 on:
   push:
     branches:
-      - feature/matter-telink-light-wall-lamp
+      - feature/matter-telink-wall-lamp
   pull_request:
     branches-ignore:
             - 'dependabot/**'
