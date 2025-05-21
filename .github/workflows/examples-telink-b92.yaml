@@ -71,7 +71,7 @@ jobs:
           scripts/run_in_build_env.sh \
             "pip3 install requests &&  pip3 install pyyaml && python3 \
             scripts/tools/telink/update_zephyr.py \
-            3e3ef8429afc2eb5c7a47c262fee2023078dee74 \
+            c95a2fcffa6c5cf509ee8273a028956c858e3300 \
             https://github.com/Leedarson-SmartLighting/matter-telink-luminaire-zephy/tree/feature/4MB_flash_SoC_080_wall-lamp \
             --token $MATTER_TOKEN"
 
