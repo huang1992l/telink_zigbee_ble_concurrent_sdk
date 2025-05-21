@@ -17,7 +17,7 @@ name: Build example - Telink
 on:
   push:
     branches:
-      - feature/matter-telink-light-connectedhomeip
+      - feature/matter-telink-light-wall-lamp
   pull_request:
     branches-ignore:
             - 'dependabot/**'
@@ -29,7 +29,7 @@ concurrency:
 
 env:
   CHIP_NO_LOG_TIMESTAMPS: true
-  SOFTWARE_VERSION: 1.1.18
+  SOFTWARE_VERSION: 1.0.6
 
 jobs:
   build:
