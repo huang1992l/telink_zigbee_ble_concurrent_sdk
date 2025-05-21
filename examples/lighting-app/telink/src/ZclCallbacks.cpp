@@ -37,6 +37,8 @@ LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 using namespace chip;
 using namespace chip::app::Clusters;
 
+
+
 #if CONFIG_STARTUP_OPTIMIZATE
 #include "AppTaskCommon.h"
 
@@ -194,8 +196,13 @@ static void UpdateColorTemperatureMireds(uint8_t * value)
             }
 
 #ifdef EXTENDEDCOLOR_LIGHT
-            lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
-            lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
+            // lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
+            // lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
+            chip::app::MarkAttributeDirty markXDirty = chip::app::MarkAttributeDirty::kNo;
+            ColorControl::Attributes::CurrentHue::Set(1, p_para->currentHue, markXDirty);
+            ColorControl::Attributes::CurrentSaturation::Set(1, p_para->currentSaturation, markXDirty);
+            ColorControl::Attributes::CurrentX::Set(1, p_para->currentX, markXDirty);
+            ColorControl::Attributes::CurrentY::Set(1, p_para->currentY, markXDirty);
 #endif
             if (store_cluster_para(p_para) != 0)
             {
@@ -310,9 +317,13 @@ static void UpdateCurrentHue(uint8_t * value)
                 ldsBulbDriverMinitrimCtrlMoveTo(state);
             }
 
-            lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
-            lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
-            lds_color_util_update_temp(1, p_para->colorTemperatureMireds);
+            // lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
+            // lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
+            // lds_color_util_update_temp(1, p_para->colorTemperatureMireds);
+            chip::app::MarkAttributeDirty markXDirty = chip::app::MarkAttributeDirty::kNo; 
+            ColorControl::Attributes::ColorTemperatureMireds::Set(1, p_para->colorTemperatureMireds, markXDirty);
+            ColorControl::Attributes::CurrentX::Set(1, p_para->currentX, markXDirty);
+            ColorControl::Attributes::CurrentY::Set(1, p_para->currentY, markXDirty);
 
             if (store_cluster_para(p_para) != 0)
             {
@@ -368,9 +379,14 @@ static void UpdateCurrentSaturation(uint8_t * value)
                 ldsBulbDriverMinitrimCtrlMoveTo(state);
             }
 
-            lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
-            lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
-            lds_color_util_update_temp(1, p_para->colorTemperatureMireds);
+            // lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
+            // lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
+            // lds_color_util_update_temp(1, p_para->colorTemperatureMireds);
+
+            chip::app::MarkAttributeDirty markXDirty = chip::app::MarkAttributeDirty::kNo; 
+            ColorControl::Attributes::ColorTemperatureMireds::Set(1, p_para->colorTemperatureMireds, markXDirty);
+            ColorControl::Attributes::CurrentX::Set(1, p_para->currentX, markXDirty);
+            ColorControl::Attributes::CurrentY::Set(1, p_para->currentY, markXDirty);
 
             if (store_cluster_para(p_para) != 0)
             {
@@ -423,12 +439,17 @@ static void UpdateCurrentX(uint8_t * value)
                 state->currentHue            = p_para->currentHue;
                 state->currentColorTempMired = p_para->colorTemperatureMireds;
 
-                ldsBulbDriverMinitrimCtrlMoveTo(state);
+                // ldsBulbDriverMinitrimCtrlMoveTo(state);
             }
 
-            lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
-            lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
-            lds_color_util_update_temp(1, p_para->colorTemperatureMireds);
+            // lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
+            // lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
+            // lds_color_util_update_temp(1, p_para->colorTemperatureMireds);
+
+            // chip::app::MarkAttributeDirty markXDirty = chip::app::MarkAttributeDirty::kNo; 
+            // ColorControl::Attributes::ColorTemperatureMireds::Set(1, p_para->colorTemperatureMireds, markXDirty);
+            // ColorControl::Attributes::CurrentHue::Set(1, p_para->currentHue, markXDirty);
+            // ColorControl::Attributes::CurrentSaturation::Set(1, p_para->currentSaturation, markXDirty);
 
             if (store_cluster_para(p_para) != 0)
             {
@@ -481,12 +502,16 @@ static void UpdateCurrentY(uint8_t * value)
                 state->currentHue            = p_para->currentHue;
                 state->currentColorTempMired = p_para->colorTemperatureMireds;
 
-                ldsBulbDriverMinitrimCtrlMoveTo(state);
+                // ldsBulbDriverMinitrimCtrlMoveTo(state);
             }
 
-            lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
-            lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
-            lds_color_util_update_temp(1, p_para->colorTemperatureMireds);
+            // lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
+            // lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
+            // lds_color_util_update_temp(1, p_para->colorTemperatureMireds);
+            // chip::app::MarkAttributeDirty markXDirty = chip::app::MarkAttributeDirty::kNo; 
+            // ColorControl::Attributes::ColorTemperatureMireds::Set(1, p_para->colorTemperatureMireds, markXDirty);
+            // ColorControl::Attributes::CurrentHue::Set(1, p_para->currentHue, markXDirty);
+            // ColorControl::Attributes::CurrentSaturation::Set(1, p_para->currentSaturation, markXDirty);
 
             if (store_cluster_para(p_para) != 0)
             {
@@ -542,9 +567,13 @@ static void UpdateEnhancedCurrentHue(uint8_t * value)
                 ldsBulbDriverMinitrimCtrlMoveTo(state);
             }
 
-            lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
-            lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
-            lds_color_util_update_temp(1, p_para->colorTemperatureMireds);
+            // lds_color_util_update_hue_saturation(1, p_para->currentHue, p_para->currentSaturation);
+            // lds_color_util_update_xy(1, p_para->currentX, p_para->currentY);
+            // lds_color_util_update_temp(1, p_para->colorTemperatureMireds);
+            chip::app::MarkAttributeDirty markXDirty = chip::app::MarkAttributeDirty::kNo; 
+            ColorControl::Attributes::ColorTemperatureMireds::Set(1, p_para->colorTemperatureMireds, markXDirty);
+            ColorControl::Attributes::CurrentX::Set(1, p_para->currentX, markXDirty);
+            ColorControl::Attributes::CurrentY::Set(1, p_para->currentY, markXDirty);
 
             if (store_cluster_para(p_para) != 0)
             {
@@ -658,10 +687,18 @@ void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & 
 void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & attributePath, uint8_t type, uint16_t size,
                                        uint8_t * value)
 {
+
+    if(!GetAppTask().IsLightControlInitCompleted())
+    {
+        // LDS_LOG_E("GetAppTask().IsLightControlInitCompleted() is false");
+        return;
+    }
     /* user mode , add the customer code here for cb*/
     ClusterId clusterId     = attributePath.mClusterId;
     AttributeId attributeId = attributePath.mAttributeId;
-    LDS_LOG_I("============MatterPostAttributeChangeCallback:clusterId:0x%x,attributeId:0x%x value:0x%x================",clusterId,attributeId,*value);
+    Protocols::InteractionModel::Status status;
+    // LDS_LOG_I("============MatterPostAttributeChangeCallback:clusterId:0x%x,attributeId:0x%x value:0x%x================",clusterId,attributeId,*value);
+
     if (clusterId == OnOff::Id )
     {         
         onoff_attribute_change_handle(attributeId,0xFF,0xFFFF,value);
@@ -678,7 +715,6 @@ void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & 
         uint8_t syncHue = 0;
         uint8_t syncSaturation = 0;
 #endif
-
         uint16_t syncX = 0;
         uint16_t syncY = 0;
         uint16_t syncColorTemp = 0;
@@ -691,6 +727,7 @@ void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & 
             case ColorControl::Attributes::CurrentY::Id:
                 if(colorMode == ColorControlServer::EnhancedColorMode::kCurrentXAndCurrentY) 
                 {       
+
 #ifdef COLORTEMPERATURE_LIGHT
                     ColorControl::Attributes::CurrentX::Get(1, &syncX);
                     ColorControl::Attributes::CurrentY::Get(1, &syncY);
@@ -733,6 +770,7 @@ void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & 
                 }
                 break;
 #endif
+
             case ColorControl::Attributes::ColorTemperatureMireds::Id:
                 if(colorMode == ColorControlServer::EnhancedColorMode::kColorTemperature) 
                 {      
@@ -759,6 +797,7 @@ void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & 
                     lds_light_control_set_currentHue(syncHue);
                     lds_light_control_set_currentSaturation(syncSaturation);
 #endif
+
                     lds_light_control_set_transitionTime(100);
                     color_attribute_change_handle(attributeId, type, size, value);
                 }
@@ -774,7 +813,7 @@ void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & 
 }
 
 #ifdef EXTENDEDCOLOR_LIGHT
-extern "C"  void ldsMatterAttrXyConversionReport(uint16_t currentX, uint16_t currentY)
+void ldsMatterAttrXyConversionReport(uint16_t currentX, uint16_t currentY)
 {
     uint8_t syncHue = 0;
     uint8_t syncSaturation = 0;
@@ -793,9 +832,8 @@ extern "C"  void ldsMatterAttrXyConversionReport(uint16_t currentX, uint16_t cur
     lds_light_control_set_currentColorTempMired(syncColorTemp);
 }
 #endif
+
 #endif
-
-
 #else
 using namespace chip;
 using namespace chip::app::Clusters;

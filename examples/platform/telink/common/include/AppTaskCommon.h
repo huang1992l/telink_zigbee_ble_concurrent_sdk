@@ -109,7 +109,8 @@ protected:
     static void FactoryResetTimerEventHandler(AppEvent * aEvent);
     static void FactoryResetButtonEventHandler(void);
     static void FactoryResetHandler(AppEvent * aEvent);
-
+    static void ldsButtonEventHandler(void);
+    static void buttonEventHandler(AppEvent * aEvent);
     static void StartBleAdvButtonEventHandler(void);
     static void StartBleAdvHandler(AppEvent * aEvent);
 
@@ -248,6 +249,8 @@ extern "C" {
 
  void matter_factory_reset(void);
 
+ void matter_factory_reset_with_restart(void);
+ 
  void matter_shut_down(void);
 
 #ifdef __cplusplus

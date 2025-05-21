@@ -37,6 +37,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
+
 LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
 namespace {
@@ -382,6 +383,7 @@ void AppTask::Set_cluster_info(void)
     }
 }
 
+
 CHIP_ERROR AppTask::Init(void)
 {
     InitCommonParts();
@@ -413,6 +415,7 @@ CHIP_ERROR AppTask::Init(void)
 
 //     }
     initComplete = true;
+
 #if (APP_LIGHT_MODE == APP_LIGHT_I2C)
     // printk("app light mode is i2c\n");
 #if 0
@@ -427,7 +430,7 @@ CHIP_ERROR AppTask::Init(void)
     #else
         printk("Function expansion preset position\n");
 #endif
-
+    
 #else
     Protocols::InteractionModel::Status status;
 
@@ -607,3 +610,4 @@ void AppTask::PowerOnFactoryResetTimerEvent(struct k_timer * timer)
     }
 }
 #endif /* CONFIG_CHIP_ENABLE_POWER_ON_FACTORY_RESET */
+

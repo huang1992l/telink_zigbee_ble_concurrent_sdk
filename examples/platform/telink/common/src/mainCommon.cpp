@@ -66,10 +66,6 @@
 #include "lds_color_algorithm.h"
 #endif
 
-#include <stdio.h>
-
-volatile unsigned char githubnumber = 29;
-
 LOG_MODULE_REGISTER(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
 using namespace ::chip;
@@ -231,6 +227,17 @@ void matter_factory_reset(void){
     chip::Server::GetInstance().ScheduleFactoryResetWithoutReboot();
 }
 
+void matter_factory_reset_with_restart(void){
+    // Erase user parameters partition and reset to Zigbee mode upon factory reset
+    flash_erase(flash_para_dev, USER_PARTITION_OFFSET, USER_PARTITION_SIZE);
+    // Need to erase zb nvs part 
+    flash_erase(zb_para_dev, ZB_NVS_START_ADR, ZB_NVS_SEC_SIZE);
+
+    LOG_INF("Factory reset triggered by power on 6 times, resetting to Zigbee mode");
+
+    chip::Server::GetInstance().ScheduleFactoryReset();
+}
+
 void matter_shut_down(void)
 {
     PlatformMgr().Shutdown();
@@ -238,200 +245,7 @@ void matter_shut_down(void)
 
 #endif
 
-#if APP_LIGHT_USER_MODE_EN
-#if CONFIG_STARTUP_OPTIMIZATE
-#include "AppTaskCommon.h"
 
-#include <zephyr/drivers/flash.h>
-#include <zephyr/storage/flash_map.h>
-
-static void init_startup_para(void)
-{
-    cluster_startup_para light_cluster_para;
-
-    if (read_cluster_para(&light_cluster_para) != 0)
-    {
-        memset((void *) (&light_cluster_para), 0xff, (sizeof(cluster_startup_para)));
-
-        light_cluster_para.onOff                         = 1;
-        light_cluster_para.startUpOnOff                  = (uint8_t)chip::app::Clusters::OnOff::StartUpOnOffEnum::kOn;
-
-        light_cluster_para.currentLevel                  = 254;
-        light_cluster_para.minLevel                      = 1;
-        light_cluster_para.maxLevel                      = 254;
-        light_cluster_para.startUpCurrentLevel           = 0xff;
-
-#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
-        light_cluster_para.colorTemperatureMireds        = 0x0172;
-        light_cluster_para.colorMode                     = 0x02;
-        light_cluster_para.startUpColorTemperatureMireds = 0xffff;
-#endif
-
-#ifdef EXTENDEDCOLOR_LIGHT
-        light_cluster_para.currentHue                    = 0x18;
-        light_cluster_para.currentSaturation             = 0xC9;
-        light_cluster_para.currentX                      = 0x753F;
-        light_cluster_para.currentY                      = 0x68F6;
-        light_cluster_para.enhancedCurrentHue            = 0x0000;
-        light_cluster_para.enhancedColorMode             = 0x02;
-#endif
-    }
-    else
-    {
-        if (!GetAppTask().OtaGetAnaFlagPublic())
-        {
-            chip::app::Clusters::OnOff::StartUpOnOffEnum cmp_startUpOnOff =
-                (chip::app::Clusters::OnOff::StartUpOnOffEnum) light_cluster_para.startUpOnOff;
-            if (cmp_startUpOnOff == chip::app::Clusters::OnOff::StartUpOnOffEnum::kOff)
-            {
-                light_cluster_para.onOff = 0;
-            }
-            else if (cmp_startUpOnOff == chip::app::Clusters::OnOff::StartUpOnOffEnum::kOn)
-            {
-                light_cluster_para.onOff = 1;
-            }
-            else if (cmp_startUpOnOff == chip::app::Clusters::OnOff::StartUpOnOffEnum::kToggle)
-            {
-                light_cluster_para.onOff = !light_cluster_para.onOff;
-            }
-            else
-            {
-                light_cluster_para.startUpOnOff = 0xff;
-            }
-        }
-
-        if (light_cluster_para.currentLevel == 0xff)
-        {
-            light_cluster_para.currentLevel = 254;
-        }
-        if (light_cluster_para.minLevel == 0xff)
-        {
-            light_cluster_para.minLevel = 1;
-        }
-        if (light_cluster_para.maxLevel == 0xff)
-        {
-            light_cluster_para.maxLevel = 254;
-        }
-        if (light_cluster_para.minLevel > light_cluster_para.maxLevel)
-        {
-            light_cluster_para.minLevel = 1;
-            light_cluster_para.maxLevel = 254;
-        }
-
-        if (light_cluster_para.startUpCurrentLevel == 0)
-        {
-            light_cluster_para.currentLevel = light_cluster_para.minLevel;
-        }
-        else if (light_cluster_para.startUpCurrentLevel != 0xff)
-        {
-            light_cluster_para.currentLevel = light_cluster_para.startUpCurrentLevel;
-        }
-
-        if (light_cluster_para.currentLevel < light_cluster_para.minLevel)
-        {
-            light_cluster_para.currentLevel = light_cluster_para.minLevel;
-        }
-        if (light_cluster_para.currentLevel > light_cluster_para.maxLevel)
-        {
-            light_cluster_para.currentLevel = light_cluster_para.maxLevel;
-        }
-
-#ifdef COLORTEMPERATURE_LIGHT
-
-        light_cluster_para.colorMode = 0x02;
-
-        if (light_cluster_para.colorTemperatureMireds == 0xffff)
-        {
-            light_cluster_para.colorTemperatureMireds = 0x0172;
-        }
-
-        if ((light_cluster_para.startUpColorTemperatureMireds >= 1) &&
-            (light_cluster_para.startUpColorTemperatureMireds <= 65279))
-        {
-            light_cluster_para.colorTemperatureMireds = light_cluster_para.startUpColorTemperatureMireds;
-        }
-#endif
-
-#ifdef EXTENDEDCOLOR_LIGHT
-        if ((light_cluster_para.startUpColorTemperatureMireds >= 1) &&
-            (light_cluster_para.startUpColorTemperatureMireds <= 65279))
-        {
-            light_cluster_para.colorMode = 0x02;
-            light_cluster_para.enhancedColorMode = 0x02;
-            light_cluster_para.colorTemperatureMireds = light_cluster_para.startUpColorTemperatureMireds;
-        }
-        else
-        {
-            if (light_cluster_para.colorMode > 2)
-            {
-                light_cluster_para.colorMode = 2;
-            }
-
-            if (light_cluster_para.enhancedColorMode > 3)
-            {
-                light_cluster_para.enhancedColorMode = light_cluster_para.colorMode;
-            }
-
-            if (light_cluster_para.colorMode == 0)
-            {
-                if (light_cluster_para.currentHue == 0xff)
-                {
-                    light_cluster_para.currentHue = 0x18;
-                }
-                if (light_cluster_para.currentSaturation == 0xff)
-                {
-                    light_cluster_para.currentSaturation = 0xC9;
-                }
-            }
-            else if (light_cluster_para.colorMode == 1)
-            {
-                if (light_cluster_para.currentX == 0xffff)
-                {
-                    light_cluster_para.currentX = 0x753F;
-                }
-                if (light_cluster_para.currentY == 0xffff)
-                {
-                    light_cluster_para.currentY = 0x68F6;
-                }
-            }
-            else
-            {
-                if (light_cluster_para.colorTemperatureMireds == 0xffff)
-                {
-                    light_cluster_para.colorTemperatureMireds = 0x0172;
-                }
-            }
-        }
-#endif
-    }
-
-    memcpy(&g_light_cluster_para, &light_cluster_para, (sizeof(cluster_startup_para)));
-
-    lds_light_control_state_t state = {0};
-
-    state.currentOnOff          = light_cluster_para.onOff;
-    state.currentLevel          = light_cluster_para.currentLevel;
-    state.transitionTime        = 100;
-
-#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
-    state.currentColorMode      = light_cluster_para.colorMode;
-    state.currentColorTempMired = light_cluster_para.colorTemperatureMireds;
-#endif
-
-#ifdef EXTENDEDCOLOR_LIGHT
-    state.currentX              = light_cluster_para.currentX;
-    state.currentY              = light_cluster_para.currentY;
-    state.currentEnhanceHue     = light_cluster_para.enhancedCurrentHue;
-    state.currentHue            = light_cluster_para.currentHue;
-    state.currentSaturation     = light_cluster_para.currentSaturation;
-#endif
-
-    init_to_startup_matter(state);
-}
-#endif
-#endif
-
-#if 1
 static const char onoff_key[]                = "g/a/1/6/0";
 static const char startUpOnOff_key[]         = "g/a/1/6/4003";
 static const char currentLevel_key[]         = "g/a/1/8/0";
@@ -453,6 +267,7 @@ static const char startUpColorTemp_key[]     = "g/a/1/300/4010";
 static const char hue_key[]                  = "g/a/1/300/0";
 static const char saturation_key[]           = "g/a/1/300/1";
 #endif
+
 
 bool ldsCheckLightOnOff()
 {
@@ -494,41 +309,36 @@ uint8_t ldsCheckLightCurrentLevel()
     uint8_t maxLevel = 0xFE;
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(minLevel_key, &minLevel);
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(maxLevel_key, &maxLevel);
-    CHIP_ERROR currentLevelErr        = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(currentLevel_key, &currentLevel);
-    CHIP_ERROR startUpCurrentLevelErr = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(startUpCurrentLevel_key, &startUpCurrentLevel);
-
-    if(startUpCurrentLevelErr == CHIP_NO_ERROR)
+    CHIP_ERROR err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(currentLevel_key, &currentLevel);
+    CHIP_ERROR err1 = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(startUpCurrentLevel_key, &startUpCurrentLevel);
+  
+    if(err1 == CHIP_NO_ERROR)
     {
-        if (startUpCurrentLevel == 0x0)
-        {
-            // Set the CurrentLevel attribute to the minimum value
+        if (startUpCurrentLevel == 0x0) {
+        // Set the CurrentLevel attribute to the minimum value
             currentLevel = minLevel;
         } 
-        else if(startUpCurrentLevel !=  0xFF)
+        else if(startUpCurrentLevel !=  0xFF)  
         {
             if(startUpCurrentLevel < minLevel)
             {
                 currentLevel = minLevel;
-            }
-            else if(startUpCurrentLevel > maxLevel)
+            }else if(startUpCurrentLevel > maxLevel)
             {
                 currentLevel = maxLevel;
-            }
-            else
-            {
+            }else{
                 currentLevel = startUpCurrentLevel;
             }
         }
+        
     }
-
+    LDS_LOG_I("CurrentLevel:%d, startUpCurrentLevel:%d, err:%d,%d", currentLevel, startUpCurrentLevel, err, err1);
     return currentLevel;
 }
 
-#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
 bool ldsCheckLightColorTemp(uint8_t *colorMode, uint16_t *colorTempMired)
 {
     uint16_t colorTempMiredMin = 0x0099;
-
 #if defined(COLORTEMPERATURE_LIGHT)
     uint16_t colorTempMiredMax = 0x01C6;
 #elif defined(EXTENDEDCOLOR_LIGHT)
@@ -536,47 +346,44 @@ bool ldsCheckLightColorTemp(uint8_t *colorMode, uint16_t *colorTempMired)
 #endif
 
     uint16_t startUpColorTempMired = 0xFFFF;
-
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(colorTempPhysicalMin_key, &colorTempMiredMin);
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(colorTempPhysicalMax_key, &colorTempMiredMax);
     CHIP_ERROR err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(startUpColorTemp_key, &startUpColorTempMired);
-
     if(err == CHIP_NO_ERROR)
     {
-        if (startUpColorTempMired >= colorTempMiredMin && startUpColorTempMired <= colorTempMiredMax)
-        {
+        if (startUpColorTempMired >= colorTempMiredMin && startUpColorTempMired <= colorTempMiredMax) {
             // Update Current color temp value to StartUpColor temp value
             *colorTempMired = startUpColorTempMired;
             *colorMode = 0x02;
             return true;
-        }
+        }     
     }
 
     return false;
 }
-#endif
 
 void ldsLightInit()
 {
-    bool     target_onoff   = 0x01;
-    uint8_t  target_level   = 0xFE;
+    uint8_t target_onoff = 0x01;
+    uint8_t target_level = 0xFE;
 
 #if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
-    uint16_t xValue         = 0x75BA;
-    uint16_t yValue         = 0x691D;
+    uint16_t xValue         = 0x501d;
+    uint16_t yValue         = 0x52b8;
     uint8_t  colorMode      = 0x02;
-    uint16_t colorTempMired = 0x0172;
+    uint16_t colorTempMired = 0x0099;
 #endif
 
 #ifdef EXTENDEDCOLOR_LIGHT
-    uint8_t  currentHue     = 0x18;
-    uint8_t  saturation     = 0xC9;
+    uint8_t  currentHue     = 0xC3;
+    uint8_t  saturation     = 0x5;
 #endif
 
+    
     target_onoff = ldsCheckLightOnOff();
     target_level = ldsCheckLightCurrentLevel();
 
-#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
+    #if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
     if (!ldsCheckLightColorTemp(&colorMode, &colorTempMired))
     {
         chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(colorMode_key, &colorMode);
@@ -631,8 +438,9 @@ void ldsLightInit()
     light_state.transitionTime = 100;
 
     init_to_startup_matter(light_state);
+
 }
-#endif
+
 
 int main(void)
 {
@@ -646,7 +454,9 @@ int main(void)
     rpc::Init();
 #endif
     ldsGetTokenInfoFromFlash();
+#ifdef COLORTEMPERATURE_LIGHT   
     ldsPowerOnCountInitTest();
+#endif    
     tsCCTAlgorithmParam_t cctAlgParam = {
                                         .driveMode = (ldsMfgTokenCctDriverModeGet() == 0x00) ? DRV_MOS : DRV_DCDC,    // Default value, DRV_DCDC
                                         .minColorTemp = 2200,                // Default value, 2700K
@@ -663,6 +473,10 @@ int main(void)
     ldsDimAlgorithmParamSet(pwm_min_duty_cycle);
     ldsPwmLutInitTable();
     ldsDriverCommonInit();
+
+
+    chip::Logging::SetLogFilter(chip::Logging::kLogCategory_None);
+    
     ldsMinitrimInit();
     ldsLightEffectInit();
     ldsDriverAdcInit();
@@ -679,8 +493,6 @@ int main(void)
         init_to_startup(kExampleEndpointId,true);
     }
     
-    printf("GitHub Number: %d\n", githubnumber);
-
     err = chip::Platform::MemoryInit();
     if (err != CHIP_NO_ERROR)
     {
@@ -740,7 +552,7 @@ int main(void)
 #endif
 
     err = GetAppTask().StartApp();
-
+    
 exit:
     LOG_ERR("Exit err %" CHIP_ERROR_FORMAT, err.Format());
     return (err == CHIP_NO_ERROR) ? EXIT_SUCCESS : EXIT_FAILURE;

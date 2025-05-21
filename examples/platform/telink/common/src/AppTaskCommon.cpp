@@ -50,7 +50,7 @@
 #include <zephyr/sys/reboot.h>
 
 #include "lds_light_effect.h"
-
+#include "lds_device_button.h"
 #if CONFIG_CHIP_OTA_REQUESTOR
 #include <app/clusters/ota-requestor/OTARequestorInterface.h>
 #endif
@@ -447,7 +447,13 @@ CHIP_ERROR AppTaskCommon::InitCommonParts(void)
 
 #if INDEPENDENT_FACTORY_RESET_BUTTON
     IndependentFactoryReset();  // Open the factory_reset button separately.
+    // Initialize function button timer
+    k_timer_init(&sFactoryResetTimer, &AppTask::FactoryResetTimerTimeoutCallback, nullptr);
+    k_timer_user_data_set(&sFactoryResetTimer, this);
 #endif
+
+    ldsButtonInit();
+    ldsButtonSetCallback(ldsButtonEventHandler);
 
 #else
     InitLeds();
@@ -457,10 +463,6 @@ CHIP_ERROR AppTaskCommon::InitCommonParts(void)
 
     InitButtons();
 #endif    
-
-    // Initialize function button timer
-    k_timer_init(&sFactoryResetTimer, &AppTask::FactoryResetTimerTimeoutCallback, nullptr);
-    k_timer_user_data_set(&sFactoryResetTimer, this);
 
     // Initialize CHIP server
 #if CONFIG_CHIP_FACTORY_DATA
@@ -473,7 +475,7 @@ CHIP_ERROR AppTaskCommon::InitCommonParts(void)
     err = mFactoryDataProvider.GetEnableKey(enableKey);
     if (err != CHIP_NO_ERROR)
     {
-        LOG_ERR("mFactoryDataProvider.GetEnableKey() failed. Could not delegate a test event trigger");
+        // LOG_ERR("mFactoryDataProvider.GetEnableKey() failed. Could not delegate a test event trigger");
         memset(sTestEventTriggerEnableKey, 0, sizeof(sTestEventTriggerEnableKey));
     }
 #else
@@ -752,6 +754,21 @@ void AppTaskCommon::FactoryResetButtonEventHandler(void)
     event.Type               = AppEvent::kEventType_Button;
     event.ButtonEvent.Action = kButtonPushEvent;
     event.Handler            = FactoryResetHandler;
+    GetAppTask().PostEvent(&event);
+}
+
+void AppTaskCommon::buttonEventHandler(AppEvent * aEvent)
+{
+    ldsButtonStart();
+}
+
+void AppTaskCommon::ldsButtonEventHandler(void)
+{
+    AppEvent event;
+
+    event.Type               = AppEvent::kEventType_Button;
+    event.ButtonEvent.Action = kButtonPushEvent;
+    event.Handler            = buttonEventHandler;
     GetAppTask().PostEvent(&event);
 }
 
@@ -1243,7 +1260,7 @@ void AppTaskCommon::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* 
 #endif
     if(sBoot_zb){
             k_timer_stop(&sDnssTimer);
-            printk("Dnss Timer stopped, Matter commissioning kDnssdInitialized.\r\n");
+            printk("Dnss Timer stopped, Matter commissioning kDnssdInitialized.%d\r\n",MATTER_FW_TYPE);
     }
         break;
     case DeviceEventType::kThreadStateChange:

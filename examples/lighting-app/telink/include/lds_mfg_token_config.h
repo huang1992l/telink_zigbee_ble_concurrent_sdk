@@ -54,7 +54,7 @@ uint32_t ldsTokenPrechargeOnOffIntervalTimeMs(void);
 uint8_t ldsMfgTokenMatterDacKey(void);
 uint16_t ldsMfgTokenOnOffTransitionTimeMs(void);
 lds_status_t ldsGetMfgTokenCwsAlgorithmMode(uint8_t *mode);
-
+uint16_t ldsMfgTokenCctDefaultColorTemperatureMired(void);
 #ifdef __cplusplus
 }
 #endif

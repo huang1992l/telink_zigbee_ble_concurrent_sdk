@@ -1,8 +1,8 @@
 /*
  * @Author: chenxiaoqian chenxiaoqian@leedarson.com
  * @Date: 2024-08-07 17:09:44
- * @LastEditors: huangshiting alyssahuang@leedarson.com
- * @LastEditTime: 2025-04-18 15:12:05
+ * @LastEditors: xiehuawei xiehuawei@leedarson.com
+ * @LastEditTime: 2025-04-28 19:30:54
  * @FilePath: /chenxiaoqian/connectedhomeip/examples/lighting-app/telink/src/lds_mfg_token_manage.cpp
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -32,9 +32,11 @@ void ldsGetTokenInfoFromFlash(void){
     memset(&token_information_set, 0xFF, sizeof(token_information_set));
     lds_token_info_t * token_info = &token_information_set;
     flash_read(flash_token_dev, TOKEN_PARTITION_OFFSET + OFFSET_START_ADDRESS, token_info, sizeof(token_information_set));
-    LDS_LOG_I("\n\n\n sizeof of token_information_set 0x%x \n",sizeof(token_information_set));
-    LDS_LOG_I("\n\n\n token_info->off_transition_time_ds 0x%x \n",token_info->off_transition_time_ds);
+
+    // LDS_LOG_I("\n\n\n sizeof of token_information_set 0x%x \n",sizeof(token_information_set));
+    // LDS_LOG_I("\n\n\n token_info->off_transition_time_ds 0x%x \n",token_info->off_transition_time_ds);
     }
+
 
 void ldsGetTokenInfoFromGlobalVariate(lds_token_info_t * token_info_pointer){
     if(token_info_pointer == NULL){
@@ -57,7 +59,7 @@ lds_status_t ldsGetMfgTokenDriverI2cType(uint8_t * i2c_type ){
     }
     *i2c_type = token_information_set.driver_i2c_type;
     if(*i2c_type == 0xFF){
-        LDS_LOG_I("driver_i2c_type from token is invaild (0xFF) \n");
+        // LDS_LOG_I("driver_i2c_type from token is invaild (0xFF) \n");
         return LDS_ERROR_INVALID_PARAMETER;
     }
     return LDS_SUCCESS;
@@ -75,7 +77,7 @@ lds_status_t ldsGetMfgTokenDriverMode(uint8_t * driver_mode){
     }
      *driver_mode = token_information_set.driver_mode;
     if(*driver_mode == 0xFF){
-        LDS_LOG_I("driver_i2c_type from token is invaild (0xFF) \n");
+        // LDS_LOG_I("driver_i2c_type from token is invaild (0xFF) \n");
         return LDS_ERROR_INVALID_PARAMETER;
     }
     return LDS_SUCCESS;
@@ -380,6 +382,12 @@ lds_status_t ldsGetMfgTokenCwsAlgorithmMode(uint8_t *mode)
     return LDS_SUCCESS;
 }
 #endif
+
+uint16_t ldsMfgTokenCctDefaultColorTemperatureMired(void)
+{
+	return ((token_information_set.default_color_temperature_mired == 0xFF) ? 0x0172 : token_information_set.default_color_temperature_mired);
+}
+
 
 #ifdef __cplusplus
 }
