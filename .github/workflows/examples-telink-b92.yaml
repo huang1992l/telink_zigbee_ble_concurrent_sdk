@@ -72,7 +72,7 @@ jobs:
             "pip3 install requests &&  pip3 install pyyaml && python3 \
             scripts/tools/telink/update_zephyr.py \
             c95a2fcffa6c5cf509ee8273a028956c858e3300 \
-            https://github.com/Leedarson-SmartLighting/matter-telink-luminaire-zephy/tree/feature/4MB_flash_SoC_080_wall-lamp \
+            https://github.com/Leedarson-SmartLighting/matter-telink-luminaire-zephy \
             --token $MATTER_TOKEN"
 
       - name: Build example Telink (B92) Lighting App with OTA and 4Mb flash
