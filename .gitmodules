@@ -337,4 +337,3 @@
 	path = third_party/lighting_cbb
 	url = https://github.com/Leedarson-SmartLighting/matter-telink-luminaire-lighting-cbb.git
 	platforms = telink
-	branch = feature/matter-telink-light-lighting-cbb
