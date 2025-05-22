@@ -178,6 +178,7 @@ jobs:
           checksumAlgorithm: "SHA256"
           labels: "cfgfile" # important
 
+
 #      - name: Start Telink signing
 #        uses: inter-ikea/rs-hs-shipit-actions/start-matter-telink-signing@main
 #        id: start-matter-telink-signing
