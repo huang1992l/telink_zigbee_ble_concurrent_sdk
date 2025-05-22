@@ -137,7 +137,8 @@ jobs:
           echo "cfg_sha256=$cfg_sha256" >> $GITHUB_OUTPUT
 
       - name: Upload ota file
-        uses: inter-ikea/rs-hs-shipit-actions/upload-file@main
+        #uses: inter-ikea/rs-hs-shipit-actions/upload-file@main
+        uses: huang1992l/telink_zigbee_ble_concurrent_sdk
         id: otafile
         with:
           file_path: "/tmp/telink_build_artifacts/telinkLightAppFW_${{ github.run_number }}_0x117C_${{ env.PRODUCT_ID}}_${{ env.SOFTWARE_VERSION }}.bin"
