@@ -43,6 +43,8 @@ target_include_directories(app PRIVATE
                            ${CBB}/bsp/telink/hal/pwm
                            ${CBB}/bsp/telink/hal/i2c  #RGBTW
                            ${CBB}/bsp/telink/hal/flash
+                           ${CBB}/bsp/telink/hal/button
+                           ${CBB}/bsp/telink/hal/spi
                            ${CBB}/bsp/telink/osal
                            ${CBB}/components/lds_cluster_utility/inc
                            ${CBB}/components/lds_color_algorithm/inc
@@ -56,6 +58,7 @@ target_include_directories(app PRIVATE
                            ${CBB}/components/lds_log/inc
                            ${CBB}/components/lds_osal/inc
                            ${CBB}/components/lds_power_on_count/inc
+                           ${CBB}/components/lds_multi_button/inc
                            ${CBB}/driver/kp18057driver
                            ${CBB}/driver/kp18056driver
                            ${CBB}/toolbox/include
@@ -77,7 +80,7 @@ target_sources(app PRIVATE
                ${TELINK_COMMON}/zephyr_ext/zephyr_key_pool.c
                ${TELINK_COMMON}/zephyr_ext/zephyr_led_pool.c
                ${TELINK_COMMON}/zephyr_ext/zephyr_pwm_pool.c
-               ${TELINK_COMMON}/zephyr_ext/zephyr_ws2812.c
+               #${TELINK_COMMON}/zephyr_ext/zephyr_ws2812.c
                 )
 
 if(CONFIG_DeviceType_DimmableLight)
