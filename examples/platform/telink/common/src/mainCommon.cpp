@@ -332,7 +332,7 @@ uint8_t ldsCheckLightCurrentLevel()
         }
         
     }
-    LDS_LOG_I("CurrentLevel:%d, startUpCurrentLevel:%d, err:%d,%d", currentLevel, startUpCurrentLevel, err, err1);
+    // LDS_LOG_I("CurrentLevel:%d, startUpCurrentLevel:%d, err:%d,%d", currentLevel, startUpCurrentLevel, err, err1);
     return currentLevel;
 }
 
