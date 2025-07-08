@@ -253,6 +253,10 @@ extern "C" {
  
  void matter_shut_down(void);
 
+#if CONFIG_WATCHDOG
+bool ldsWatchdogGetAnaFlag(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

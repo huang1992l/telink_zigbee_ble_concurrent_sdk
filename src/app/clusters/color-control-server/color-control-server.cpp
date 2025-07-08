@@ -27,6 +27,8 @@
 
 #include "lds_light_effect.h"
 
+#include <math.h>
+
 #ifdef MATTER_DM_PLUGIN_SCENES_MANAGEMENT
 #include <app/clusters/scenes-server/scenes-server.h>
 #endif
@@ -519,6 +521,9 @@ bool ColorControlServer::stopMoveStepCommand(app::CommandHandler * commandObj, c
             initSaturationTransitionState(endpoint, saturationState);
         }
 #endif // MATTER_DM_PLUGIN_COLOR_CONTROL_SERVER_HSV
+
+    Attributes::RemainingTime::Set(endpoint, 0);
+
     }
 
     commandObj->AddStatus(commandPath, status);
@@ -720,7 +725,9 @@ EmberEventControl * ColorControlServer::getEventControl(EndpointId endpoint)
  *
  * @param endpoint The identifying endpoint Ver.: always
  */
-void ColorControlServer::computePwmFromTemp(EndpointId endpoint) {}
+void ColorControlServer::computePwmFromTemp(EndpointId endpoint) 
+{
+}
 
 /** @brief Compute Pwm from HSV
  *
@@ -729,7 +736,9 @@ void ColorControlServer::computePwmFromTemp(EndpointId endpoint) {}
  *
  * @param endpoint The identifying endpoint Ver.: always
  */
-void ColorControlServer::computePwmFromHsv(EndpointId endpoint) {}
+void ColorControlServer::computePwmFromHsv(EndpointId endpoint) 
+{
+}
 
 /** @brief Compute Pwm from HSV
  *
@@ -1309,6 +1318,7 @@ Status ColorControlServer::moveToSaturation(uint8_t saturation, uint16_t transit
  * @return Status::Success if successful,Status::UnsupportedEndpoint if the saturation transition state doesn't exist,
  * Status::ConstraintError if the saturation is above maximum
  */
+static uint8_t moveToHueAndSaturation_flag = 0;
 Status ColorControlServer::moveToHueAndSaturation(uint16_t hue, uint8_t saturation, uint16_t transitionTime, bool isEnhanced,
                                                   EndpointId endpoint)
 {
@@ -1376,7 +1386,7 @@ Status ColorControlServer::moveToHueAndSaturation(uint16_t hue, uint8_t saturati
     colorSaturationTransitionState->highLimit      = MAX_SATURATION_VALUE;
 
     SetHSVRemainingTime(endpoint);
-
+    moveToHueAndSaturation_flag = 1;
     // kick off the state machine:
     scheduleTimerCallbackMs(configureHSVEventControl(endpoint), transitionTime ? TRANSITION_UPDATE_TIME_MS.count() : 0);
 
@@ -2106,11 +2116,18 @@ void ColorControlServer::updateHueSatCommand(EndpointId endpoint)
     {
         if (previousHue != colorHueTransitionState->currentHue)
         {
+#ifdef EXTENDEDCOLOR_LIGHT
+            if(moveToHueAndSaturation_flag && (previousSaturation != colorSaturationTransitionState->currentValue))
+            {
+                lds_light_control_set_currentHue(colorHueTransitionState->currentHue);     
+            }
+#endif            
             Attributes::CurrentHue::Set(colorHueTransitionState->endpoint, colorHueTransitionState->currentHue);
             ChipLogProgress(Zcl, "Hue %d endpoint %d", colorHueTransitionState->currentHue, endpoint);
         }
     }
-
+    moveToHueAndSaturation_flag = 0;
+    
     if (previousSaturation != colorSaturationTransitionState->currentValue)
     {
         Attributes::CurrentSaturation::Set(colorSaturationTransitionState->endpoint,
@@ -2544,6 +2561,32 @@ Status ColorControlServer::moveToColorTemp(EndpointId aEndpoint, uint16_t colorT
     // now, kick off the state machine.
     Attributes::ColorTemperatureMireds::Get(endpoint, &(colorTempTransitionState->initialValue));
     Attributes::ColorTemperatureMireds::Get(endpoint, &(colorTempTransitionState->currentValue));
+
+#ifdef COLORTEMPERATURE_LIGHT
+    // X WS PWM low brightness color temperature jump problem
+    if (transitionTime < 10)
+    {
+        app::DataModel::Nullable<uint8_t> currentLevel;
+        Status status = LevelControl::Attributes::CurrentLevel::Get(endpoint, currentLevel);
+
+        if (status == Status::Success && !currentLevel.IsNull())
+        {
+            if (currentLevel.Value() == 1)
+            {
+                transitionTime = 10;
+            }
+            if ((currentLevel.Value() > 1) && (currentLevel.Value() < 100))
+            {
+                uint8_t minTime = ceil((float)(100 - currentLevel.Value()) / 10);
+
+                if (transitionTime < minTime)
+                {
+                    transitionTime = minTime;
+                }
+            }
+        }
+    }
+#endif
 
     colorTempTransitionState->finalValue     = colorTemperature;
     colorTempTransitionState->stepsRemaining = max<uint16_t>(transitionTime, 1);

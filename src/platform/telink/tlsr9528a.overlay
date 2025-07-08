@@ -35,13 +35,13 @@
 	pwm_pool {
 		compatible = "pwm-leds";
 		out {
-			pwms = 	<&pwm0 0 PWM_HZ(20000) PWM_POLARITY_NORMAL>,
+			pwms = 	<&pwm0 0 PWM_HZ(4000) PWM_POLARITY_NORMAL>,
 					/*<&pwm0 2 PWM_MSEC(1) PWM_POLARITY_NORMAL>,
 					<&pwm0 0 PWM_MSEC(1) PWM_POLARITY_NORMAL>,*/
-					<&pwm0 1 PWM_HZ(20000) PWM_POLARITY_NORMAL>,
-					<&pwm0 2 PWM_HZ(20000) PWM_POLARITY_NORMAL>,
-					<&pwm0 3 PWM_HZ(20000) PWM_POLARITY_NORMAL>,
-					<&pwm0 4 PWM_HZ(20000) PWM_POLARITY_NORMAL>;
+					<&pwm0 1 PWM_HZ(4000) PWM_POLARITY_NORMAL>,
+					<&pwm0 2 PWM_HZ(4000) PWM_POLARITY_NORMAL>,
+					<&pwm0 3 PWM_HZ(4000) PWM_POLARITY_NORMAL>,
+					<&pwm0 4 PWM_HZ(4000) PWM_POLARITY_NORMAL>;
 		};
 	};
 

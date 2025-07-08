@@ -1,8 +1,8 @@
 /*
  * @Author: chenxiaoqian chenxiaoqian@leedarson.com
  * @Date: 2024-08-07 17:09:44
- * @LastEditors: xiehuawei xiehuawei@leedarson.com
- * @LastEditTime: 2025-04-28 19:30:54
+ * @LastEditors: huangshiting alyssahuang@leedarson.com
+ * @LastEditTime: 2025-06-09 19:39:30
  * @FilePath: /chenxiaoqian/connectedhomeip/examples/lighting-app/telink/src/lds_mfg_token_manage.cpp
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -41,6 +41,7 @@ void ldsGetTokenInfoFromFlash(void){
 void ldsGetTokenInfoFromGlobalVariate(lds_token_info_t * token_info_pointer){
     if(token_info_pointer == NULL){
         LDS_LOG_I("i2c_type pointer is NULL \n");
+        return;
     } 
      memcpy(token_info_pointer, &token_information_set, sizeof(token_information_set));
 }

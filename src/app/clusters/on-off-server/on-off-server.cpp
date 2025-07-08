@@ -498,7 +498,11 @@ void OnOffServer::initOnOffServer(chip::EndpointId endpoint)
         bool onOffValueForStartUp = false;
         Status status;
 
-        if (GetAppTask().OtaGetAnaFlagPublic())
+        if (GetAppTask().OtaGetAnaFlagPublic()
+#if CONFIG_WATCHDOG
+            || ldsWatchdogGetAnaFlag()
+#endif
+        )
         {
             status = Attributes::OnOff::Get(endpoint, &onOffValueForStartUp);
         }

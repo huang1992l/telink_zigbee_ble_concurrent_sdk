@@ -53,6 +53,10 @@
 
 #include <math.h>
 
+#include "lds_light_control.h"
+#include "lds_light_effect.h"
+
+
 using namespace chip;
 using namespace chip::app;
 using namespace chip::app::Clusters;
@@ -955,11 +959,14 @@ static Status moveToLevelHandler(EndpointId endpoint, CommandId commandId, uint8
             if ((!onOff) && (state->moveToLevel != state->minLevel))
             {
                 currentLevel.Value() = state->minLevel;
-                status = Attributes::CurrentLevel::Set(endpoint, currentLevel.Value());
+                // status = Attributes::CurrentLevel::Set(endpoint, currentLevel.Value());
+                status = SetCurrentLevelQuietReport(endpoint, state, currentLevel, true /*isStartOrEndOfTransition*/);
+
                 if (status != Status::Success)
                 {
                     ChipLogProgress(Zcl, "ERR: writing current level %x", to_underlying(status));
                 }
+                // ldsMatterPrechargeFlagSet(false);
             }
             // LDS Code End
             setOnOffValue(endpoint, (state->moveToLevel != state->minLevel));
@@ -1031,7 +1038,7 @@ static Status moveToLevelHandler(EndpointId endpoint, CommandId commandId, uint8
     state->storedLevel              = storedLevel;
     state->callbackSchedule.runTime = System::Clock::Milliseconds32(0);
 
-    if (state->eventDurationMs >= 100)
+    if ((state->eventDurationMs >= 100) || (state->transitionTimeMs == 0))
     {
         state->stepSize = 1;
     }
@@ -1051,6 +1058,8 @@ static Status moveToLevelHandler(EndpointId endpoint, CommandId commandId, uint8
         ScenesManagement::ScenesServer::Instance().MakeSceneInvalidForAllFabrics(endpoint);
     }
 #endif // MATTER_DM_PLUGIN_SCENES_MANAGEMENT
+
+    ldsLightMultiEffectStop();
 
     // The setup was successful, so mark the new state as active and return.
     scheduleTimerCallbackMs(endpoint, computeCallbackWaitTimeMs(state->callbackSchedule, state->eventDurationMs));
@@ -1202,6 +1211,8 @@ static void moveHandler(CommandHandler * commandObj, const ConcreteCommandPath &
     state->storedLevel              = INVALID_STORED_LEVEL;
     state->callbackSchedule.runTime = System::Clock::Milliseconds32(0);
 
+    ldsLightMultiEffectStop();
+
     // The setup was successful, so mark the new state as active and return.
     scheduleTimerCallbackMs(endpoint, computeCallbackWaitTimeMs(state->callbackSchedule, state->eventDurationMs));
     status = Status::Success;
@@ -1345,7 +1356,7 @@ static void stepHandler(CommandHandler * commandObj, const ConcreteCommandPath &
     state->eventDurationMs = state->transitionTimeMs / std::max(static_cast<uint8_t>(1u), actualStepSize);
     state->elapsedTimeMs   = 0;
 
-    if (state->eventDurationMs >= 100)
+    if ((state->eventDurationMs >= 100) || (state->transitionTimeMs == 0))
     {
         state->stepSize = 1;
     }
@@ -1360,6 +1371,8 @@ static void stepHandler(CommandHandler * commandObj, const ConcreteCommandPath &
     // storedLevel is not used for Step commands
     state->storedLevel              = INVALID_STORED_LEVEL;
     state->callbackSchedule.runTime = System::Clock::Milliseconds32(0);
+
+    ldsLightMultiEffectStop();
 
     // The setup was successful, so mark the new state as active and return.
     scheduleTimerCallbackMs(endpoint, computeCallbackWaitTimeMs(state->callbackSchedule, state->eventDurationMs));
@@ -1393,6 +1406,7 @@ static void stopHandler(CommandHandler * commandObj, const ConcreteCommandPath &
 
     // Cancel any currently active command.
     cancelEndpointTimerCallback(endpoint);
+    ldsLightMultiEffectStop();
     // SetCurrentLevelQuietReport(endpoint, state, state->quietCurrentLevel.value(), true /*isStartOrEndOfTransition*/);
     SetCurrentLevelQuietReport(endpoint, state, currentLevel, true /*isStartOrEndOfTransition*/);
     writeRemainingTime(endpoint, 0);
@@ -1486,12 +1500,29 @@ void emberAfOnOffClusterLevelControlEffectCallback(EndpointId endpoint, bool new
 
     if (newValue)
     {
-#ifndef IGNORE_LEVEL_CONTROL_CLUSTER_ON_OFF_TRANSITION_TIME
-        if (currentOnOffTransitionTime == 0)
+        DataModel::Nullable<uint16_t> onTransitionTime;
+        onTransitionTime.SetNull();
+
+#ifndef IGNORE_LEVEL_CONTROL_CLUSTER_ON_TRANSITION_TIME
+        if (emberAfContainsAttribute(endpoint, LevelControl::Id, Attributes::OnTransitionTime::Id))
+        {
+            status = Attributes::OnTransitionTime::Get(endpoint, onTransitionTime);
+
+            if (status == Status::Success && !onTransitionTime.IsNull())
+            {
+                float ratio = static_cast<float>(resolvedLevel.Value() - minimumLevelAllowedForTheDevice) / 
+                              static_cast<float>(std::max(static_cast<uint8_t>(1u), static_cast<uint8_t>(state->maxLevel - minimumLevelAllowedForTheDevice)));
+
+                transitionTime.SetNonNull(static_cast<uint16_t>(onTransitionTime.Value() * ratio));
+            }
+        }
+#endif // IGNORE_LEVEL_CONTROL_CLUSTER_ON_TRANSITION_TIME
+
+        if ((currentOnOffTransitionTime == 0) && onTransitionTime.IsNull())
         {
             return;
         }
-#endif
+
         // If newValue is OnOff::Commands::On::Id...
         // "Set CurrentLevel to minimum level allowed for the device."
         status = SetCurrentLevelQuietReport(endpoint, state, minimumLevelAllowedForTheDevice, true /*isStartOrEndOfTransition*/);
@@ -1509,6 +1540,22 @@ void emberAfOnOffClusterLevelControlEffectCallback(EndpointId endpoint, bool new
     }
     else
     {
+#ifndef IGNORE_LEVEL_CONTROL_CLUSTER_OFF_TRANSITION_TIME
+        if (emberAfContainsAttribute(endpoint, LevelControl::Id, Attributes::OffTransitionTime::Id))
+        {
+            DataModel::Nullable<uint16_t> offTransitionTime;
+            status = Attributes::OffTransitionTime::Get(endpoint, offTransitionTime);
+
+            if (status == Status::Success && !offTransitionTime.IsNull())
+            {
+                float ratio = static_cast<float>(temporaryCurrentLevelCache.Value() - minimumLevelAllowedForTheDevice) / 
+                              static_cast<float>(std::max(static_cast<uint8_t>(1u), static_cast<uint8_t>(state->maxLevel - minimumLevelAllowedForTheDevice)));
+
+                transitionTime.SetNonNull(static_cast<uint16_t>(offTransitionTime.Value() * ratio));
+            }
+        }
+#endif // IGNORE_LEVEL_CONTROL_CLUSTER_OFF_TRANSITION_TIME
+
         // ...else if newValue is OnOff::Commands::Off::Id...
         // "Move CurrentLevel to the minimum level allowed for the device over the
         // time period OnOffTransitionTime."
@@ -1639,6 +1686,7 @@ void MatterLevelControlClusterServerShutdownCallback(EndpointId endpoint)
 {
     ChipLogProgress(Zcl, "Shuting down level control server cluster on endpoint %d", endpoint);
     cancelEndpointTimerCallback(endpoint);
+    ldsLightMultiEffectStop();
 }
 
 #ifndef IGNORE_LEVEL_CONTROL_CLUSTER_START_UP_CURRENT_LEVEL

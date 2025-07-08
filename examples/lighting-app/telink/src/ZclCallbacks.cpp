@@ -697,7 +697,7 @@ void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & 
     ClusterId clusterId     = attributePath.mClusterId;
     AttributeId attributeId = attributePath.mAttributeId;
     Protocols::InteractionModel::Status status;
-    // LDS_LOG_I("============MatterPostAttributeChangeCallback:clusterId:0x%x,attributeId:0x%x value:0x%x================",clusterId,attributeId,*value);
+    // printf("============MatterPostAttributeChangeCallback:clusterId:0x%x,attributeId:0x%x value:0x%x================\r\n",clusterId,attributeId,*value);
 
     if (clusterId == OnOff::Id )
     {         
@@ -727,7 +727,6 @@ void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & 
             case ColorControl::Attributes::CurrentY::Id:
                 if(colorMode == ColorControlServer::EnhancedColorMode::kCurrentXAndCurrentY) 
                 {       
-
 #ifdef COLORTEMPERATURE_LIGHT
                     ColorControl::Attributes::CurrentX::Get(1, &syncX);
                     ColorControl::Attributes::CurrentY::Get(1, &syncY);
@@ -775,7 +774,6 @@ void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & 
                 if(colorMode == ColorControlServer::EnhancedColorMode::kColorTemperature) 
                 {      
                     ColorControl::Attributes::ColorTemperatureMireds::Get(1, &syncColorTemp);
-
 #ifdef COLORTEMPERATURE_LIGHT
                     ldsColorConversionColorTempLight(0x02, &syncX, &syncY, &syncColorTemp);
                     ColorControl::Attributes::CurrentX::Set(1, syncX, markXDirty);

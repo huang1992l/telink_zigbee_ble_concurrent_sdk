@@ -17,6 +17,9 @@
  */
 
 #include "AppTask.h"
+#if CONFIG_WATCHDOG
+#include <analog.h>
+#endif
 
 #include <lib/support/CHIPMem.h>
 #include <platform/CHIPDeviceLayer.h>
@@ -276,7 +279,11 @@ bool ldsCheckLightOnOff()
     CHIP_ERROR onOffErr        = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(onoff_key, &onoff);
     CHIP_ERROR startUpOnOffErr = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(startUpOnOff_key, &startUpOnOff);
 
-    if (!GetAppTask().OtaGetAnaFlagPublic())
+    if (!GetAppTask().OtaGetAnaFlagPublic()
+#if CONFIG_WATCHDOG
+        && !ldsWatchdogGetAnaFlag()
+#endif
+    )
     {
         // if(startUpOnOffErr == CHIP_NO_ERROR)
         {
@@ -297,6 +304,7 @@ bool ldsCheckLightOnOff()
             }
         }
     }
+
 
     return onoff;
 }
@@ -332,7 +340,7 @@ uint8_t ldsCheckLightCurrentLevel()
         }
         
     }
-    // LDS_LOG_I("CurrentLevel:%d, startUpCurrentLevel:%d, err:%d,%d", currentLevel, startUpCurrentLevel, err, err1);
+    LDS_LOG_I("CurrentLevel:%d, startUpCurrentLevel:%d, err:%d,%d", currentLevel, startUpCurrentLevel, err, err1);
     return currentLevel;
 }
 
@@ -367,11 +375,16 @@ void ldsLightInit()
     uint8_t target_onoff = 0x01;
     uint8_t target_level = 0xFE;
 
-#if (defined COLORTEMPERATURE_LIGHT) || (defined EXTENDEDCOLOR_LIGHT)
+#if  (defined EXTENDEDCOLOR_LIGHT)
     uint16_t xValue         = 0x501d;
     uint16_t yValue         = 0x52b8;
     uint8_t  colorMode      = 0x02;
     uint16_t colorTempMired = 0x0099;
+#elif defined(COLORTEMPERATURE_LIGHT)
+    uint16_t xValue         = 0x501d;
+    uint16_t yValue         = 0x52b8;
+    uint8_t  colorMode      = 0x02;
+    uint16_t colorTempMired = 0x00A7;
 #endif
 
 #ifdef EXTENDEDCOLOR_LIGHT
@@ -474,13 +487,14 @@ int main(void)
     ldsPwmLutInitTable();
     ldsDriverCommonInit();
 
+    printf("SOFTWARE VERSION:%d, SOFTWARE VERSION STRING :%s\r\n",CONFIG_CHIP_DEVICE_SOFTWARE_VERSION, CONFIG_CHIP_DEVICE_SOFTWARE_VERSION_STRING);
 
-    chip::Logging::SetLogFilter(chip::Logging::kLogCategory_None);
+    // chip::Logging::SetLogFilter(chip::Logging::kLogCategory_Error);
     
     ldsMinitrimInit();
     ldsLightEffectInit();
-    ldsDriverAdcInit();
-    ldsDeivceNtcInit();
+    // ldsDriverAdcInit();
+    // ldsDeivceNtcInit();
 
     unsigned char val;
     flash_read(flash_para_dev, USER_PARTITION_OFFSET, &val, 1);
@@ -557,3 +571,21 @@ exit:
     LOG_ERR("Exit err %" CHIP_ERROR_FORMAT, err.Format());
     return (err == CHIP_NO_ERROR) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
+
+#if CONFIG_WATCHDOG
+#define MATTER_ANALOG_REG_WDT_ADR   0x3c
+#define MATTER_WDT_BY_CONTROL       BIT(0)
+
+bool ldsWatchdogGetAnaFlag(void)
+{
+    if (!(analog_read(MATTER_ANALOG_REG_WDT_ADR) & MATTER_WDT_BY_CONTROL))
+    {
+        printk("watchdog startup...\r\n");
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+#endif

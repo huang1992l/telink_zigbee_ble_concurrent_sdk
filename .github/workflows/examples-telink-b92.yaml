@@ -29,7 +29,7 @@ concurrency:
 
 env:
   CHIP_NO_LOG_TIMESTAMPS: true
-  SOFTWARE_VERSION: 1.0.6
+  SOFTWARE_VERSION: 1.0.5
   PRODUCT_ID: "0x9010"
 
 jobs:
@@ -72,7 +72,7 @@ jobs:
           scripts/run_in_build_env.sh \
             "pip3 install requests &&  pip3 install pyyaml && python3 \
             scripts/tools/telink/update_zephyr.py \
-            481c50184af1aa062f81333c7184488f44cc81cd \
+            9490dd3267cddb9f3dbdd257df2963891debb86f \
             https://github.com/Leedarson-SmartLighting/matter-telink-luminaire-zephyr \
             --token $MATTER_TOKEN"
 
