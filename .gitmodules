@@ -336,4 +336,5 @@
 [submodule "third_party/lighting_cbb"]
 	path = third_party/lighting_cbb
 	url = https://github.com/Leedarson-SmartLighting/matter-telink-luminaire-lighting-cbb.git
+	branch = feature/x_pendant_lamp
 	platforms = telink
