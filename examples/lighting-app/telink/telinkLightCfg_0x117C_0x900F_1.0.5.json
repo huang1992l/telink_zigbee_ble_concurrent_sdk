@@ -1,0 +1,15 @@
+{
+  "headerSize": "0x200",
+  "slotSize": "0x1A5000",
+  "alignBit": 1,
+  "productId": "tlsr9528a",
+  "productType": "dualStack",
+  "productInfo": {
+    "vendorId": "0x117C",
+    "productId": "0x900F",
+    "versionNumber": "0x01000005",
+    "versionString": "1.0.5",
+    "minVersion": "0x0100003",
+    "maxVersion": "0x0100004"
+  }
+}
