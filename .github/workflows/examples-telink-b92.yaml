@@ -29,7 +29,7 @@ concurrency:
 
 env:
   CHIP_NO_LOG_TIMESTAMPS: true
-  SOFTWARE_VERSION: 1.0.6
+  SOFTWARE_VERSION: 1.0.7
   PRODUCT_ID: "0x9010"
 
 jobs:
@@ -144,7 +144,7 @@ jobs:
           api_key: ${{ secrets.SHIPIT_API_KEY }}
           api_url: ${{ vars.SHIPIT_URL }}
           friendlyName: "telinkLightAppFW_${{ github.run_number }}_0x117C_${{ env.PRODUCT_ID}}_${{ env.SOFTWARE_VERSION }}.bin"
-          version: "16777222"
+          version: "16777223"
           versionType: "INTEGER"
           checksum: ${{ steps.checksha256.outputs.appfw_sha256 }}
           checksumAlgorithm: "SHA256"
@@ -158,7 +158,7 @@ jobs:
           api_key: ${{ secrets.SHIPIT_API_KEY }}
           api_url: ${{ vars.SHIPIT_URL }}
           friendlyName: "telinkLightBtl_${{ github.run_number }}_0x117C_${{ env.PRODUCT_ID}}_${{ env.SOFTWARE_VERSION }}.bin"
-          version: "16777222"
+          version: "16777223"
           versionType: "INTEGER"
           checksum: ${{ steps.checksha256.outputs.btl_sha256 }}
           checksumAlgorithm: "SHA256"
@@ -172,7 +172,7 @@ jobs:
           api_key: ${{ secrets.SHIPIT_API_KEY }}
           api_url: ${{ vars.SHIPIT_URL }}
           friendlyName: "telinkLightCfg_${{ github.run_number }}_0x117C_${{ env.PRODUCT_ID}}_${{ env.SOFTWARE_VERSION }}.json"
-          version: "16777222"
+          version: "16777223"
           versionType: "INTEGER"
           checksum: ${{ steps.checksha256.outputs.cfg_sha256 }}
           checksumAlgorithm: "SHA256"
